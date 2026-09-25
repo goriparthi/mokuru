@@ -459,6 +459,9 @@ def serve(daemon: Daemon | None = None, block: bool = True) -> Daemon:
     config.PID_FILE.write_text(str(os.getpid()))
     config.PORT_FILE.write_text(str(server.server_address[1]))
     threading.Thread(target=server.serve_forever, name="mokuru-http", daemon=True).start()
+    if daemon.cfg.get("dial_switcher"):
+        from . import dialswitch
+        dialswitch.start()
     worker = threading.Thread(target=daemon.run, name="mokuru-device", daemon=True)
     worker.start()
 

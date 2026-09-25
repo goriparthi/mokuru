@@ -20,6 +20,7 @@ DEFAULTS = {
     "claude_lighting": True,   # react to Claude Code hooks
     "per_key": True,           # while working: context bar on the F-row
     "done_hold": 4.0,          # seconds of green after Claude finishes
+    "dial_switcher": True,     # Ctrl + dial = app switcher (Windows)
     "colors": {
         "working": [217, 119, 87],
         "attention": [255, 0, 0],

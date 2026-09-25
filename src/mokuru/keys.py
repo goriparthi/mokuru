@@ -69,3 +69,4 @@ def context_pattern(pct: float, base=(217, 119, 87), dim: float = 0.35) -> bytes
 def bar_level(pct: float, keys: int = 12) -> int:
     """The number of lit bar keys: patterns only need re-uploading when this changes."""
     return round(keys * max(0.0, min(pct, 100.0)) / 100)
+

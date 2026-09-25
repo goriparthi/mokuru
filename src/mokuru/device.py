@@ -236,7 +236,29 @@ class Keyboard:
                 raw += self.read()
         return [tuple(raw[i * 4:i * 4 + 4]) for i in range(128)]
 
+    def read_fn_layer(self, os_layer: int = 0) -> list[tuple]:
+        """Fn layer of the active profile (os_layer 0 = Windows, 1 = macOS)."""
+        with self.lock:
+            profile = self.roundtrip(packet(0x84))[1]
+            raw = b""
+            for page in range(8):
+                self.send(packet(0x90, bytes([os_layer, profile, 0xFF, page])))
+                time.sleep(0.02)
+                raw += self.read()
+        return [tuple(raw[i * 4:i * 4 + 4]) for i in range(128)]
+
     # --- writes ----------------------------------------------------------
+
+    def set_fn_key(self, slot: int, value: tuple, os_layer: int = 0) -> None:
+        """One Fn-layer slot. `value` is 4 bytes, e.g. (0, mod, usage, mod2)."""
+        with self.lock:
+            profile = self.roundtrip(packet(0x84))[1]
+            self._flash_wait()
+            pkt = packet(0x10, bytes([os_layer, profile, slot]))
+            pkt[8:12] = bytes(value)
+            self.send(pkt)
+            time.sleep(0.5)
+            self._last_flash = time.monotonic() - FLASH_COOLDOWN + 1.0
 
     def set_lighting(self, light: Lighting) -> None:
         self.send(light.packet())

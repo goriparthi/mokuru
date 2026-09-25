@@ -27,6 +27,16 @@ def _font(size: int, bold: bool = False):
     return ImageFont.load_default()
 
 
+def _fitted(d, text: str, size: int, max_w: float, bold: bool = True):
+    """The largest font up to `size` that keeps `text` within `max_w` pixels."""
+    while size > 10:
+        f = _font(size, bold)
+        if d.textlength(text, font=f) <= max_w:
+            return f
+        size -= 1
+    return _font(size, bold)
+
+
 def fit(img: Image.Image) -> bytes:
     return ImageOps.fit(img.convert("RGB"), SIZE).tobytes()
 
@@ -103,34 +113,40 @@ def usage_card(status: dict, state: str = "idle", now: float | None = None) -> b
 
     img = Image.new("RGB", SIZE, BG)
     d = ImageDraw.Draw(img)
+    x0, x1 = 7, SCREEN_W - 7
     # header
-    d.rectangle([0, 0, SCREEN_W, 30], fill=CLAUDE)
-    d.text((SCREEN_W // 2, 15), "claude code", fill=(255, 255, 255),
-           font=_font(15, True), anchor="mm")
-    y = 42
-    d.text((8, y), model.lower(), fill=FG, font=_font(16, True)); y += 22
+    d.rectangle([0, 0, SCREEN_W, 32], fill=CLAUDE)
+    d.text((SCREEN_W // 2, 16), "claude code", fill=(255, 255, 255),
+           font=_font(18, True), anchor="mm")
+    d.text((x0, 40), model.lower(), fill=FG, font=_font(22, True))
     if project:
-        d.text((8, y), project[:16], fill=DIM, font=_font(13)); y += 24
-    # context
-    d.text((8, y), "context", fill=DIM, font=_font(12)); y += 16
+        d.text((x0, 68), project[:14], fill=DIM, font=_font(17))
+    # context: label and value share a row, bar underneath
     col = _level_color(pct)
-    d.rounded_rectangle([8, y, SCREEN_W - 8, y + 14], radius=4, outline=(60, 60, 66))
-    w = int((SCREEN_W - 18) * min(pct, 100) / 100)
+    label = _font(15)
+    room = x1 - x0 - d.textlength("context", font=label) - 6
+    d.text((x0, 124), "context", fill=DIM, font=label, anchor="ls")
+    d.text((x1, 126), f"{pct:.0f}%", fill=col,
+           font=_fitted(d, f"{pct:.0f}%", 30, room), anchor="rs")
+    d.rounded_rectangle([x0, 134, x1, 150], radius=5, outline=(70, 70, 76))
+    w = int((x1 - x0 - 2) * min(pct, 100) / 100)
     if w > 0:
-        d.rounded_rectangle([9, y + 1, 9 + w, y + 13], radius=3, fill=col)
-    y += 18
-    d.text((8, y), f"{pct:.0f}%", fill=col, font=_font(22, True)); y += 34
+        d.rounded_rectangle([x0 + 1, 135, x0 + 1 + w, 149], radius=4, fill=col)
     # cost
-    d.text((8, y), "session cost", fill=DIM, font=_font(12)); y += 16
-    d.text((8, y), f"${cost:.2f}", fill=FG, font=_font(22, True)); y += 32
+    room = x1 - x0 - d.textlength("cost", font=label) - 6
+    d.text((x0, 196), "cost", fill=DIM, font=label, anchor="ls")
+    d.text((x1, 198), f"${cost:.2f}", fill=FG,
+           font=_fitted(d, f"${cost:.2f}", 30, room), anchor="rs")
+    # footer: lines changed, and when this card was drawn (keys show live state)
+    fy = SCREEN_H - 14
     if lines_added is not None:
-        d.text((8, y), f"+{lines_added}", fill=GREEN, font=_font(13))
-        d.text((64, y), f"-{lines_removed or 0}", fill=RED, font=_font(13))
-    # footer: when this card was drawn (the keys show the live state)
-    d.text((8, SCREEN_H - 15), "updated", fill=DIM, font=_font(12), anchor="lm")
-    d.text((SCREEN_W - 8, SCREEN_H - 15),
-           time.strftime("%H:%M", time.localtime(now or time.time())),
-           fill=DIM, font=_font(12), anchor="rm")
+        f = _font(15)
+        plus = f"+{lines_added}"
+        d.text((x0, fy), plus, fill=GREEN, font=f, anchor="lm")
+        d.text((x0 + d.textlength(plus, font=f) + 5, fy), f"-{lines_removed or 0}",
+               fill=RED, font=f, anchor="lm")
+    d.text((x1, fy), time.strftime("%H:%M", time.localtime(now or time.time())),
+           fill=DIM, font=_font(15), anchor="rm")
     return img.tobytes()
 
 

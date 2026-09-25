@@ -8,6 +8,9 @@ Runs on Windows, macOS and Linux.
   a green flash when it's done, then your own lighting comes back.
 - The 135×240 LCD shows a usage card: model, session, context %, cost, lines changed.
 - Set lighting effects, put pictures and animations on the LCD, set the clock.
+- **Ctrl + dial = app switcher** (Windows): hold Ctrl and turn to walk through
+  windows like Alt+Tab, release Ctrl to pick one; Ctrl + press opens Task View.
+  The dial alone is still volume.
 - A tray icon (optional) shows Claude's state and has quick controls.
 
 ## Install
@@ -62,6 +65,15 @@ hooks talk to it, and start it if it isn't running.
 With several Claude sessions open, the most urgent one wins
 (needs-you > working > done).
 
+### Ctrl + dial
+
+The dial sends ordinary Volume Up/Down/Mute keys, and the keyboard's firmware
+ignores its Fn layer for the dial, so this can't be done on the keyboard itself.
+Instead the daemon installs a Windows low-level keyboard hook: with Ctrl held,
+dial clicks are swallowed and turned into a held-Alt Tab / Shift+Tab sequence.
+It only works while the daemon runs (`mokuru install autostart`). Turn it off
+with `"dial_switcher": false`. macOS and Linux aren't supported yet.
+
 ### Status line
 
 Claude Code gives its status-line command a JSON payload with the model,
@@ -84,6 +96,7 @@ mkdir -p "$HOME/.mokuru" && printf '%s' "$payload" > "$HOME/.mokuru/status.json"
   "claude_lighting": true,
   "per_key": true,
   "done_hold": 4.0,
+  "dial_switcher": true,
   "colors": {"working": [217, 119, 87], "attention": [255, 0, 0], "done": [0, 220, 60]},
   "lcd": {"enabled": true, "slot": 0, "min_interval": 300}
 }
