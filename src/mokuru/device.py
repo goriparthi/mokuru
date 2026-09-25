@@ -50,6 +50,14 @@ class DeviceNotFound(RuntimeError):
     pass
 
 
+class RelayTimeout(OSError):
+    """The 2.4 GHz receiver didn't hand a packet over (keyboard asleep or away)."""
+
+
+# 2.4 GHz receiver opcodes (answered by the dongle itself, not relayed).
+RX_STATUS, RX_SELECT, RX_RELEASE, RX_TARGET_KEYBOARD = 0xF7, 0xF6, 0xFC, 0x0A
+
+
 def checksum(buf: bytearray, upto: int) -> None:
     """Store 0xFF - (sum of buf[:upto]) at buf[upto]."""
     buf[upto] = 0xFF - (sum(buf[:upto]) & 0xFF)
@@ -159,12 +167,16 @@ def per_key_packets(colors: bytes, slot: int = 0) -> list[bytearray]:
 class Keyboard:
     """One open AK8753. Thread-safe: every wire exchange takes the lock."""
 
-    def __init__(self, path: bytes | None = None):
-        path = path or find_path()
+    def __init__(self, path: bytes | None = None, wireless: bool = False):
         if path is None:
-            raise DeviceNotFound("MOKURU AK8753 not found (plugged in by cable?)")
+            found = find_device()
+            if found is None:
+                raise DeviceNotFound("MOKURU AK8753 not found (USB cable or 2.4 GHz dongle)")
+            path, wireless = found
         self.dev = hid.device()
         self.dev.open_path(path)
+        self.path = path
+        self.wireless = wireless
         self.lock = threading.RLock()
         self._last_write = 0.0
         self._last_flash = 0.0
@@ -183,7 +195,7 @@ class Keyboard:
 
     # --- wire ------------------------------------------------------------
 
-    def send(self, pkt: bytes) -> None:
+    def _raw_send(self, pkt: bytes) -> None:
         with self.lock:
             wait = WRITE_GAP - (time.monotonic() - self._last_write)
             if wait > 0:
@@ -191,18 +203,63 @@ class Keyboard:
             self.dev.send_feature_report(bytes([0]) + bytes(pkt))
             self._last_write = time.monotonic()
 
-    def read(self) -> bytes:
+    def _raw_read(self) -> bytes:
         with self.lock:
             reply = bytes(self.dev.get_feature_report(0, REPORT_LEN + 1))
         if len(reply) == REPORT_LEN + 1 and reply[0] == 0:
             reply = reply[1:]
         return reply
 
+    def send(self, pkt: bytes) -> None:
+        if self.wireless:
+            self._relay(pkt, want_reply=False)
+        else:
+            self._raw_send(pkt)
+
     def roundtrip(self, pkt: bytes) -> bytes:
+        if self.wireless:
+            return self._relay(pkt, want_reply=True)
         with self.lock:
-            self.send(pkt)
+            self._raw_send(pkt)
             time.sleep(0.01)
-            return self.read()
+            return self._raw_read()
+
+    # --- 2.4 GHz relay -----------------------------------------------------
+
+    def receiver_status(self) -> bytes:
+        with self.lock:
+            self._raw_send(packet(RX_STATUS))
+            time.sleep(0.02)
+            return self._raw_read()
+
+    def _wait_receiver(self, ready) -> bytes:
+        for _ in range(10):
+            r = self.receiver_status()
+            if ready(r):
+                return r
+            time.sleep(0.05)
+        raise RelayTimeout("2.4 GHz receiver not ready (is the keyboard awake?)")
+
+    def _relay(self, pkt: bytes, want_reply: bool) -> bytes:
+        """Receiver handshake: ready -> select keyboard -> packet [-> reply]."""
+        with self.lock:
+            self._wait_receiver(lambda r: r[5] == 1)
+            self._raw_send(packet(RX_SELECT, bytes([RX_TARGET_KEYBOARD])))
+            self._raw_send(pkt)
+            if not want_reply:
+                time.sleep(0.07)
+                return b""
+            self._wait_receiver(lambda r: r[0] == 1)
+            self._raw_send(packet(RX_RELEASE))
+            time.sleep(0.01)
+            return self._raw_read()
+
+    def battery(self) -> int | None:
+        """Keyboard battery percent, over 2.4 GHz only (the cable has no reading)."""
+        if not self.wireless:
+            return None
+        r = self.receiver_status()
+        return r[1] if r[3] == 0 else None
 
     def flash_ready(self) -> bool:
         return time.monotonic() - self._last_flash >= FLASH_COOLDOWN
@@ -231,9 +288,7 @@ class Keyboard:
             profile = self.roundtrip(packet(0x84))[1]
             raw = b""
             for page in range(8):
-                self.send(packet(0x8A, bytes([profile, 0xFF, page, 0])))
-                time.sleep(0.02)
-                raw += self.read()
+                raw += self.roundtrip(packet(0x8A, bytes([profile, 0xFF, page, 0])))
         return [tuple(raw[i * 4:i * 4 + 4]) for i in range(128)]
 
     def read_fn_layer(self, os_layer: int = 0) -> list[tuple]:
@@ -242,9 +297,7 @@ class Keyboard:
             profile = self.roundtrip(packet(0x84))[1]
             raw = b""
             for page in range(8):
-                self.send(packet(0x90, bytes([os_layer, profile, 0xFF, page])))
-                time.sleep(0.02)
-                raw += self.read()
+                raw += self.roundtrip(packet(0x90, bytes([os_layer, profile, 0xFF, page])))
         return [tuple(raw[i * 4:i * 4 + 4]) for i in range(128)]
 
     # --- writes ----------------------------------------------------------
@@ -285,6 +338,8 @@ class Keyboard:
         released so urgent commands (lighting) can go out mid-upload.
         Returns the number of pages sent.
         """
+        if self.wireless:
+            raise RuntimeError("LCD pictures need the USB cable")
         left, top, right, bottom = box or (0, 0, SCREEN_W, SCREEN_H)
         data = rgb565_column_major(rgb, right - left, bottom - top)
         ann, pages = screen_packets(data, slot, frames, delay, box)
@@ -309,9 +364,49 @@ class Keyboard:
         return len(pages)
 
 
-def find_path() -> bytes | None:
-    for d in hid.enumerate(VID):
-        if (d["product_id"] in PIDS and d["usage_page"] == USAGE_PAGE
-                and d["usage"] == USAGE):
-            return d["path"]
+def is_receiver_status(r: bytes) -> bool:
+    """A receiver status has a device-kind byte a keyboard reply can't produce."""
+    return len(r) >= 9 and r[0] != RX_STATUS and r[6] in (1, 2, 3)
+
+
+def find_device() -> tuple[bytes, bool] | None:
+    """(path, wireless). The cable wins; otherwise any 0x3151 receiver."""
+    vendor = [d for d in hid.enumerate(VID)
+              if d["usage_page"] == USAGE_PAGE and d["usage"] in (1, 2)]
+    for d in vendor:
+        if d["product_id"] in PIDS and d["usage"] == USAGE:
+            return d["path"], False
+    for d in vendor:
+        if d["product_id"] in PIDS:
+            continue
+        dev = hid.device()
+        try:
+            dev.open_path(d["path"])
+            pkt = packet(RX_STATUS)
+            dev.send_feature_report(bytes([0]) + bytes(pkt))
+            time.sleep(0.02)
+            r = bytes(dev.get_feature_report(0, REPORT_LEN + 1))
+            if len(r) == REPORT_LEN + 1 and r[0] == 0:
+                r = r[1:]
+            if is_receiver_status(r):
+                return d["path"], True
+        except OSError:
+            pass
+        finally:
+            dev.close()
     return None
+
+
+def present_paths() -> set:
+    """Paths of the vendor collections currently plugged in (cheap to call)."""
+    return {d["path"] for d in hid.enumerate(VID) if d["usage_page"] == USAGE_PAGE}
+
+
+def cable_present() -> bool:
+    return any(d["product_id"] in PIDS and d["usage_page"] == USAGE_PAGE
+               for d in hid.enumerate(VID))
+
+
+def find_path() -> bytes | None:
+    found = find_device()
+    return found[0] if found else None

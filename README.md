@@ -107,7 +107,12 @@ mkdir -p "$HOME/.mokuru" && printf '%s' "$payload" > "$HOME/.mokuru/status.json"
 - **Keyboard:** MOKURU AK8753, USB `3151:5002`, vendor device 3177 (ROYUAN gen2
   command set, yc3123 chip). Other ROYUAN boards speak similar dialects but
   differ in the details; this package checks the device ID before writing.
-- **Wired only for the LCD.** Screen frames need the USB cable.
+- **2.4 GHz works for lighting.** Over the dongle (`3151:5006`) every command
+  is relayed through the receiver, so colours, Claude states and the per-key
+  bar all work, and `mokuru status` shows the keyboard's battery. LCD frames
+  need the USB cable. When both are connected the cable wins, and the daemon
+  switches between them as you plug and unplug. Bluetooth can't carry these
+  commands.
 - **Flash wear.** Per-key patterns and LCD frames are written to the keyboard's
   flash. mokuru spaces flash writes at least 10 s apart, re-uploads the per-key
   pattern only when the context bar gains or loses a key, and refreshes the usage
@@ -115,8 +120,9 @@ mkdir -p "$HOME/.mokuru" && printf '%s' "$payload" > "$HOME/.mokuru/status.json"
   Whole-board lighting changes are cheap and instant.
 - **LCD updates are slow**, about 20 s for a full frame. A smaller box doesn't
   help: it replaces the picture rather than patching it.
-- **Animations are experimental.** Frames go into slots 1..N and the keyboard
-  loops them, but the playback layout isn't fully worked out yet.
+- **LCD pages.** Fn + pressing the dial cycles the screen's pages (clock,
+  pictures, …). Animations are experimental: frames go into slots 1..N and
+  the keyboard loops them, but the playback details aren't fully worked out.
 - **Never sent:** `0xAC` (erases every stored picture), `0x7F`/`0x30` (firmware
   boot entry). `mokuru.device.packet()` refuses them.
 

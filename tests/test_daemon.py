@@ -35,6 +35,8 @@ class FakeKeyboard:
         self.lighting = lighting
         self.sent = []
         self.per_key = []
+        self.wireless = False
+        self.path = b"fake"
 
     def get_lighting(self):
         return self.lighting

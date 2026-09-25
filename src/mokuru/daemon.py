@@ -16,7 +16,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from . import config, keys, screen
 from .device import (DEVICE_ID, FLAG_FIXED, MODE_PER_KEY, MODES, SCREEN_SLOTS,
-                     DeviceNotFound, Keyboard, Lighting)
+                     DeviceNotFound, Keyboard, Lighting, cable_present, present_paths)
 
 PRIORITY = {"attention": 3, "working": 2, "done": 1, "idle": 0}
 EVENT_STATE = {"prompt": "working", "permission": "attention", "stop": "done"}
@@ -90,6 +90,9 @@ class Daemon:
         self.last_error = ""
         self._last_connect_try = 0.0
         self._clock_day = None
+        self.battery: int | None = None
+        self._battery_at = 0.0
+        self._alive_at = 0.0
 
     # --- public, thread safe -----------------------------------------------
 
@@ -107,6 +110,8 @@ class Daemon:
     def info(self) -> dict:
         return {
             "connected": self.kb is not None,
+            "link": None if self.kb is None else ("2.4GHz" if self.kb.wireless else "usb"),
+            "battery": self.battery,
             "state": self.state,
             "paused": config.paused(),
             "sessions": self.sessions.snapshot(),
@@ -124,6 +129,8 @@ class Daemon:
     def run(self) -> None:
         while not self.stop_evt.is_set():
             try:
+                if self.kb is not None:
+                    self._check_link()
                 if self.kb is None:
                     self._connect()
                 self._drain_commands()
@@ -132,6 +139,7 @@ class Daemon:
                 if self.kb is not None:
                     self._apply_state(allow_flash=True)
                     self._maybe_clock()
+                    self._maybe_battery()
                     self._maybe_lcd()
             except (OSError, ValueError) as e:
                 self._disconnect(f"device error: {e}")
@@ -172,6 +180,20 @@ class Daemon:
             self._show_idle()
         elif self.baseline is None:
             self._capture_baseline()
+
+    def _check_link(self) -> None:
+        """Windows accepts writes to an unplugged device without an error, so
+        watch the device list instead: drop a vanished link, and move from
+        the dongle to the cable when it appears (the LCD needs the cable)."""
+        if time.monotonic() - self._alive_at < 2:
+            return
+        self._alive_at = time.monotonic()
+        if self.kb.path not in present_paths():
+            self._disconnect("keyboard disconnected")
+            self._last_connect_try = 0.0
+        elif self.kb.wireless and cable_present():
+            self._disconnect("switching to the USB cable")
+            self._last_connect_try = 0.0
 
     def _disconnect(self, why: str) -> None:
         self.last_error = why
@@ -228,6 +250,11 @@ class Daemon:
             self.applied = want
         self.shown_state = state
 
+    def _maybe_battery(self) -> None:
+        if self.kb.wireless and time.monotonic() - self._battery_at > 60:
+            self._battery_at = time.monotonic()
+            self.battery = self.kb.battery()
+
     def _maybe_clock(self) -> None:
         day = time.strftime("%Y-%m-%d")
         if self._clock_day != day:
@@ -264,7 +291,8 @@ class Daemon:
 
     def _maybe_lcd(self) -> None:
         lcd = self.cfg["lcd"]
-        if not lcd["enabled"] or not self.status or self.state == "attention":
+        if (not lcd["enabled"] or not self.status or self.state == "attention"
+                or self.kb.wireless):   # frames need the cable
             return
         key = self._lcd_key()
         if key == self.lcd_last_key:
