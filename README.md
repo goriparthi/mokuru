@@ -1,7 +1,11 @@
 # mokuru
 
+**[goriparthi.github.io/mokuru](https://goriparthi.github.io/mokuru/)**: see it in action
+
 Lights and LCD for the **MOKURU AK8753** keyboard, with **Claude Code** integration.
 Runs on Windows, macOS and Linux.
+
+[![mokuru: the keyboard while Claude is working](docs/assets/keyboard-working.svg)](https://goriparthi.github.io/mokuru/)
 
 - Your keys show what Claude is doing: Claude-orange while it works (with the
   context window filling up across F1–F12), red when it needs your permission,
@@ -136,5 +140,8 @@ the keyboard's own responses. This is an independent implementation.
 
 ```sh
 pip install -e ".[tray,dev]"
-pytest              # no keyboard needed
+pytest                      # no keyboard needed
+python tools/build_site.py  # re-render the website images in docs/assets
 ```
+
+The website lives in `docs/` and is published by `.github/workflows/pages.yml`.

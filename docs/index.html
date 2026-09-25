@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>mokuru: your keyboard knows what Claude is doing</title>
+<meta name="description" content="Open-source lights and LCD for the MOKURU AK8753 keyboard. Claude Code working, waiting for you, or done, shown right on your keys.">
+<meta property="og:title" content="mokuru">
+<meta property="og:description" content="Your keyboard knows what Claude is doing.">
+<meta property="og:image" content="https://goriparthi.github.io/mokuru/assets/keyboard-working.svg">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cg stroke='%23d97757' stroke-width='6' stroke-linecap='round'%3E%3Cpath d='M32 6v14M32 44v14M6 32h14M44 32h14M13 13l10 10M41 41l10 10M13 51l10-10M41 23l10-10'/%3E%3C/g%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #0f0f12; --bg2: #16161b; --card: #1b1b21; --line: #2a2a32;
+    --fg: #ececf0; --dim: #9a9aa6; --claude: #d97757; --red: #ff4d4d; --green: #3ddc84;
+    --mono: ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, monospace;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+         font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  a { color: var(--claude); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 20px; }
+
+  nav { position: sticky; top: 0; z-index: 5; backdrop-filter: blur(10px);
+        background: color-mix(in srgb, var(--bg) 80%, transparent); border-bottom: 1px solid var(--line); }
+  nav .wrap { display: flex; align-items: center; gap: 24px; height: 56px; }
+  nav .brand { font-weight: 700; color: var(--fg); display: flex; align-items: center; gap: 10px; font-size: 18px; }
+  nav .links { margin-left: auto; display: flex; gap: 20px; font-size: 14px; }
+  nav .links a { color: var(--dim); }
+  nav .links a:hover { color: var(--fg); text-decoration: none; }
+  .spark { width: 22px; height: 22px; }
+
+  header { padding: 72px 0 40px; text-align: center;
+           background: radial-gradient(60% 50% at 50% 0%, rgba(217,119,87,.16), transparent 70%); }
+  h1 { font-size: clamp(34px, 6vw, 60px); line-height: 1.08; margin: 0 0 16px; letter-spacing: -.02em; }
+  h1 em { font-style: normal; color: var(--claude); }
+  .lede { color: var(--dim); font-size: clamp(17px, 2.2vw, 20px); max-width: 680px; margin: 0 auto 28px; }
+  .cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .btn { display: inline-flex; align-items: center; gap: 8px; padding: 11px 20px; border-radius: 10px;
+         font-weight: 600; font-size: 15px; border: 1px solid var(--line); color: var(--fg); background: var(--card); }
+  .btn.primary { background: var(--claude); border-color: var(--claude); color: #fff; }
+  .btn:hover { text-decoration: none; filter: brightness(1.08); }
+
+  .stage { display: grid; grid-template-columns: minmax(0, 1fr) 150px; gap: 28px; align-items: center;
+           margin: 48px auto 0; max-width: 1000px; }
+  .board { position: relative; aspect-ratio: 773 / 318; }
+  .board img { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0;
+               animation: cycle 16s infinite; filter: drop-shadow(0 20px 40px rgba(0,0,0,.5)); }
+  .board img:nth-child(1) { animation-delay: 0s; }
+  .board img:nth-child(2) { animation-delay: 4s; }
+  .board img:nth-child(3) { animation-delay: 8s; }
+  .board img:nth-child(4) { animation-delay: 12s; }
+  @keyframes cycle { 0% { opacity: 0 } 3% { opacity: 1 } 25% { opacity: 1 } 28% { opacity: 0 } 100% { opacity: 0 } }
+  .lcd { border-radius: 14px; padding: 8px; background: #09090b; border: 1px solid var(--line);
+         box-shadow: 0 20px 40px rgba(0,0,0,.5), inset 0 0 0 1px #000; }
+  .lcd img { display: block; width: 100%; border-radius: 6px; image-rendering: auto; }
+  .lcd-cap { font-size: 12px; color: var(--dim); text-align: center; margin-top: 8px; }
+  .states { display: flex; gap: 10px; justify-content: center; margin-top: 26px; flex-wrap: wrap; }
+  .chip { font-size: 13px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line);
+          color: var(--dim); animation: chip 16s infinite; }
+  .chip i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 7px; vertical-align: 1px; }
+  .chip:nth-child(1) { animation-delay: 0s; }  .chip:nth-child(2) { animation-delay: 4s; }
+  .chip:nth-child(3) { animation-delay: 8s; }  .chip:nth-child(4) { animation-delay: 12s; }
+  @keyframes chip { 0%, 27% { color: var(--fg); border-color: #55555f; background: var(--card) } 28%, 100% { } }
+  @media (prefers-reduced-motion: reduce) {
+    .board img, .chip { animation: none; }
+    .board img:nth-child(2) { opacity: 1; }
+  }
+
+  section { padding: 72px 0; border-top: 1px solid var(--line); }
+  h2 { font-size: clamp(26px, 3.6vw, 36px); margin: 0 0 10px; letter-spacing: -.01em; }
+  .sub { color: var(--dim); margin: 0 0 36px; max-width: 700px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 22px; }
+  .card h3 { margin: 10px 0 6px; font-size: 17px; }
+  .card p { margin: 0; color: var(--dim); font-size: 15px; }
+  .icon { width: 36px; height: 36px; border-radius: 9px; display: grid; place-items: center; font-size: 18px;
+          background: rgba(217,119,87,.14); color: var(--claude); }
+
+  .flow { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; counter-reset: s; }
+  .step { position: relative; padding: 20px 20px 20px 58px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; }
+  .step::before { counter-increment: s; content: counter(s); position: absolute; left: 18px; top: 18px; width: 28px; height: 28px;
+                  border-radius: 50%; background: var(--claude); color: #fff; font-weight: 700; display: grid; place-items: center; font-size: 14px; }
+  .step b { display: block; margin-bottom: 4px; }
+  .step span { color: var(--dim); font-size: 15px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 15px; }
+  th, td { text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--dim); font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; }
+  .sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 8px; vertical-align: -1px; }
+
+  pre { margin: 0; background: #0a0a0d; border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px;
+        overflow-x: auto; font: 14px/1.7 var(--mono); color: #d8d8e0; }
+  pre .c { color: #6f6f7c; }
+  pre .p { color: var(--claude); user-select: none; }
+  code { font-family: var(--mono); font-size: .92em; background: #202027; padding: 2px 6px; border-radius: 5px; }
+  .two > *, .grid > *, .flow > *, .stage > * { min-width: 0; }
+  .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 24px; align-items: start; }
+
+  .notes li { margin-bottom: 10px; color: var(--dim); }
+  .notes li b { color: var(--fg); }
+
+  footer { border-top: 1px solid var(--line); padding: 36px 0 60px; color: var(--dim); font-size: 14px; }
+  footer .wrap { display: flex; gap: 20px; flex-wrap: wrap; justify-content: space-between; }
+
+  @media (max-width: 720px) {
+    .stage { grid-template-columns: 1fr; }
+    .lcd { width: 150px; margin: 0 auto; }
+    nav .links a.hide-sm { display: none; }
+    nav .links { gap: 14px; }
+    pre { font-size: 12.5px; padding: 14px; }
+    th, td { padding: 10px 8px; }
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <a class="brand" href="#top">
+      <svg class="spark" viewBox="0 0 64 64" aria-hidden="true"><g stroke="#d97757" stroke-width="6" stroke-linecap="round"><path d="M32 6v14M32 44v14M6 32h14M44 32h14M13 13l10 10M41 41l10 10M13 51l10-10M41 23l10-10"/></g></svg>
+      mokuru
+    </a>
+    <div class="links">
+      <a href="#features">Features</a>
+      <a class="hide-sm" href="#how">How it works</a>
+      <a href="#install">Install</a>
+      <a href="https://github.com/goriparthi/mokuru">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<header id="top">
+  <div class="wrap">
+    <h1>Your keyboard knows<br>what <em>Claude</em> is doing.</h1>
+    <p class="lede">mokuru turns the MOKURU AK8753's RGB and built-in LCD into a status light for Claude Code:
+      working, waiting for you, or done. You can see it from across the room.</p>
+    <div class="cta">
+      <a class="btn primary" href="#install">Get started</a>
+      <a class="btn" href="https://github.com/goriparthi/mokuru">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        View on GitHub
+      </a>
+    </div>
+
+    <div class="stage">
+      <div class="board" aria-label="The keyboard cycling through Claude states">
+        <img src="assets/keyboard-idle.svg" alt="Idle: your own rainbow lighting">
+        <img src="assets/keyboard-working.svg" alt="Working: Claude orange with the context bar on F1 to F12">
+        <img src="assets/keyboard-attention.svg" alt="Needs you: red">
+        <img src="assets/keyboard-done.svg" alt="Done: green">
+      </div>
+      <div>
+        <div class="lcd"><img src="assets/lcd-usage.png" alt="LCD usage card: model, session, context 42%, cost $3.18"></div>
+        <div class="lcd-cap">the keyboard's own LCD</div>
+      </div>
+    </div>
+    <div class="states">
+      <span class="chip"><i style="background:linear-gradient(90deg,#f55,#fd5,#5f8,#58f)"></i>idle, your lighting</span>
+      <span class="chip"><i style="background:var(--claude)"></i>working</span>
+      <span class="chip"><i style="background:var(--red)"></i>needs you</span>
+      <span class="chip"><i style="background:var(--green)"></i>done</span>
+    </div>
+  </div>
+</header>
+
+<section id="features">
+  <div class="wrap">
+    <h2>A status light you already own</h2>
+    <p class="sub">No extra hardware. mokuru talks to the keyboard over its own USB protocol,
+      so the keys and screen become part of your Claude Code workflow.</p>
+    <div class="grid">
+      <div class="card"><div class="icon">✦</div><h3>Claude states on your keys</h3>
+        <p>Orange while Claude works, red when it's waiting for permission, a green flash when it's done.
+          Then your own lighting comes back.</p></div>
+      <div class="card"><div class="icon">▮▮▮</div><h3>Context bar on F1–F12</h3>
+        <p>The function row fills green to red as the context window fills up, so you can see how much room is left.</p></div>
+      <div class="card"><div class="icon">▣</div><h3>Usage card on the LCD</h3>
+        <p>Model, session, context and cost, drawn on the keyboard's 135×240 screen from Claude Code's status line.</p></div>
+      <div class="card"><div class="icon">⟳</div><h3>Ctrl + dial = app switcher</h3>
+        <p>Hold Ctrl and turn the dial to step through your windows like Alt+Tab. Release to pick one.
+          The dial alone is still volume.</p></div>
+      <div class="card"><div class="icon">⌁</div><h3>Cable or 2.4 GHz</h3>
+        <p>Lighting works through the wireless dongle too, with a battery readout. It switches over automatically as you plug and unplug.</p></div>
+      <div class="card"><div class="icon">⚑</div><h3>Many sessions, one board</h3>
+        <p>Run several Claude Code sessions and the most urgent one wins: "needs you" beats "working", which beats "done".</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="how">
+  <div class="wrap">
+    <h2>How it works</h2>
+    <p class="sub">Claude Code hooks send events to a small local daemon, and the daemon decides what the keyboard shows.</p>
+    <div class="flow">
+      <div class="step"><b>Claude Code hooks</b><span>Prompt submitted, permission prompt, tool finished, stop. Each runs <code>mokuru hook</code>.</span></div>
+      <div class="step"><b>Local daemon</b><span>Listens on 127.0.0.1 only, tracks each session, and starts itself on the first hook.</span></div>
+      <div class="step"><b>Keyboard</b><span>Whole-board effects are instant. Per-key patterns and LCD frames are rate-limited to protect its flash.</span></div>
+    </div>
+    <div style="height:28px"></div>
+    <table>
+      <tr><th>Claude Code</th><th>Your keyboard</th></tr>
+      <tr><td>You submit a prompt</td><td><span class="sw" style="background:var(--claude)"></span>Claude orange, Esc bright, context bar on F1–F12</td></tr>
+      <tr><td>Claude asks for permission</td><td><span class="sw" style="background:var(--red)"></span>Fast red breathing until you answer</td></tr>
+      <tr><td>Claude finishes</td><td><span class="sw" style="background:var(--green)"></span>Green for 4 seconds, then your own lighting</td></tr>
+      <tr><td>Nothing running</td><td><span class="sw" style="background:linear-gradient(90deg,#f55,#fd5,#5f8,#58f)"></span>Whatever you set with <code>mokuru light</code></td></tr>
+    </table>
+  </div>
+</section>
+
+<section id="install">
+  <div class="wrap two">
+    <div>
+      <h2>Install</h2>
+      <p class="sub" style="margin-bottom:20px">Python 3.9+ on Windows, macOS or Linux. Plug the keyboard in by USB cable for the LCD.</p>
+<pre><span class="p">$ </span>pipx install "git+https://github.com/goriparthi/mokuru.git#egg=mokuru[tray]"
+
+<span class="p">$ </span>mokuru info                <span class="c"># finds the keyboard</span>
+<span class="p">$ </span>mokuru install hooks       <span class="c"># Claude Code hooks</span>
+<span class="p">$ </span>mokuru install statusline  <span class="c"># feeds the LCD card</span>
+<span class="p">$ </span>mokuru install autostart   <span class="c"># tray icon at login</span></pre>
+      <p class="sub" style="margin-top:14px">On Linux, <code>mokuru install udev</code> prints the rule that lets you open the keyboard without root.</p>
+    </div>
+    <div>
+      <h2>Everyday commands</h2>
+      <p class="sub" style="margin-bottom:20px">Your lighting is what the board returns to when Claude is idle.</p>
+<pre><span class="p">$ </span>mokuru light wave                  <span class="c"># rainbow</span>
+<span class="p">$ </span>mokuru light static --color 00ffcc
+<span class="p">$ </span>mokuru image photo.jpg             <span class="c"># LCD picture</span>
+<span class="p">$ </span>mokuru lcd usage                   <span class="c"># usage card</span>
+<span class="p">$ </span>mokuru pause | resume
+<span class="p">$ </span>mokuru status                      <span class="c"># link, battery, state</span></pre>
+    </div>
+  </div>
+</section>
+
+<section id="notes">
+  <div class="wrap two">
+    <div>
+      <h2>Careful with your keyboard</h2>
+      <ul class="notes">
+        <li><b>Nothing destructive is ever sent.</b> The commands that erase stored pictures or enter firmware
+          boot mode are refused by the code itself.</li>
+        <li><b>Flash writes are rationed.</b> They're spaced at least 10 s apart, the per-key pattern is only
+          rewritten when the bar changes, and the LCD refreshes at most every 5 minutes.</li>
+        <li><b>The device is checked first.</b> mokuru identifies the board before writing anything.</li>
+      </ul>
+    </div>
+    <div>
+      <h2>Good to know</h2>
+      <ul class="notes">
+        <li><b>Built for the MOKURU AK8753</b> (USB <code>3151:5002</code>, dongle <code>3151:5006</code>).
+          Other ROYUAN-based boards are similar but not the same.</li>
+        <li><b>The LCD needs the cable.</b> A full frame takes about 20 seconds. Bluetooth can't carry these commands.</li>
+        <li><b>Fn + press the dial</b> to flip the LCD between its clock and your pictures.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span>mokuru · MIT licensed · by <a href="https://github.com/goriparthi">goriparthi</a></span>
+    <span>Protocol notes from <a href="https://github.com/dniminenn/sharkfin">sharkfin</a>. Not affiliated with MOKURU or Anthropic.</span>
+  </div>
+</footer>
+
+</body>
+</html>
