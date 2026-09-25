@@ -226,6 +226,12 @@ def main(argv=None) -> int:
         serve()
         return 0
     if c == "tray":
+        if daemon_running():  # take over from a plain background daemon
+            _request("/shutdown", {})
+            deadline = time.monotonic() + 5
+            while daemon_running() and time.monotonic() < deadline:
+                time.sleep(0.1)
+            time.sleep(0.5)
         from .tray import run_tray
         return run_tray()
     if c == "start":
