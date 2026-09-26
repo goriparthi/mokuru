@@ -197,8 +197,9 @@ def build_parser() -> argparse.ArgumentParser:
                     help=f"frames to keep (max {SCREEN_SLOTS}; uses slots 1..N)")
     gp.add_argument("--delay", type=int, help="frame delay in 10 ms units (default: from the GIF)")
 
-    cp = sub.add_parser("lcd", help="usage card on the LCD on/off")
-    cp.add_argument("mode", choices=["usage", "off"])
+    cp = sub.add_parser("lcd", help="Claude/system screens on the LCD: usage (on), off, or blank SLOTS")
+    cp.add_argument("mode", choices=["usage", "off", "blank"])
+    cp.add_argument("slots", nargs="*", type=int, help="with 'blank': slots to clear (0-4)")
 
     hp = sub.add_parser("hook", help="(Claude Code hook entry point)")
     hp.add_argument("event", choices=sorted(set(HOOK_EVENTS.values())))
@@ -271,8 +272,15 @@ def main(argv=None) -> int:
               f"(usage card turned off; `mokuru lcd usage` to restore)")
         return 0
     if c == "lcd":
+        if args.mode == "blank":
+            if not args.slots or any(not 0 <= s < SCREEN_SLOTS for s in args.slots):
+                raise SystemExit(f"mokuru: give slots 0..{SCREEN_SLOTS - 1} to blank")
+            t = time.monotonic()
+            cmd("blank", slots=args.slots)
+            print(f"blanked slots {args.slots} in {time.monotonic() - t:.0f}s")
+            return 0
         res = cmd("lcd", enabled=args.mode == "usage")
-        print("usage card", "on" if res["lcd"]["enabled"] else "off")
+        print("LCD screens", "on" if res["lcd"]["enabled"] else "off")
         return 0
     if c in ("install", "uninstall"):
         from . import install

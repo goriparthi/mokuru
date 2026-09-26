@@ -47,6 +47,7 @@ class FakeKb:
 
 def test_each_screen_uploads_once_per_change(tmp_path, monkeypatch):
     d = make(tmp_path, monkeypatch)
+    d.cfg["lcd"]["screens"] = {"0": "usage", "1": "session"}   # both driven by STATUS
     d.kb, d.status = FakeKb(), dict(STATUS)
     for _ in range(4):
         d._maybe_lcd()
@@ -55,3 +56,16 @@ def test_each_screen_uploads_once_per_change(tmp_path, monkeypatch):
     d.status = {**STATUS, "rate_limits": {"seven_day": {"used_percentage": 40}}}
     d._maybe_lcd()
     assert d.kb.uploads == [0, 1, 0]            # only the usage screen (slot 0) changed
+
+
+def test_system_card_renders():
+    stats = {"cpu": 12.5, "cores": 8, "ghz": 3.2, "host": "box",
+             "mem": {"percent": 61, "used": 10 * 2**30, "total": 16 * 2**30},
+             "disk": {"percent": 40, "used": 200 * 2**30, "total": 500 * 2**30},
+             "uptime": 3 * 86400 + 3600}
+    assert len(screen.system_card(stats)) == 135 * 240 * 3
+    assert len(screen.system_card({})) == 135 * 240 * 3
+
+
+def test_default_screens_are_usage_then_system():
+    assert config.DEFAULTS["lcd"]["screens"] == {"0": "usage", "1": "system"}

@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.9"
 license = "MIT"
 authors = [{ name = "Prashanth Goriparthi" }]
-dependencies = ["hidapi>=0.14", "pillow>=10"]
+dependencies = ["hidapi>=0.14", "pillow>=10", "psutil>=5.9"]
 
 [project.optional-dependencies]
 tray = ["pystray>=0.19"]

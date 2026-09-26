@@ -30,6 +30,14 @@ SAMPLE_STATUS = {
 }
 
 
+SAMPLE_SYSTEM = {
+    "cpu": 23, "cores": 12, "ghz": 3.4, "host": "workstation",
+    "mem": {"percent": 58, "used": 18.6 * 2**30, "total": 32 * 2**30},
+    "disk": {"percent": 46, "used": 438 * 2**30, "total": 953 * 2**30},
+    "uptime": 2 * 86400 + 5 * 3600,
+}
+
+
 def hexc(rgb) -> str:
     return "#%02x%02x%02x" % tuple(int(c) for c in rgb)
 
@@ -93,10 +101,9 @@ def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     for state in ("idle", "working", "attention", "done"):
         (OUT / f"keyboard-{state}.svg").write_text(keyboard_svg(state), encoding="utf-8", newline="\n")
-    screen.preview(screen.usage_card(SAMPLE_STATUS, now=1790376000), str(OUT / "lcd-usage.png"), 2)
+    screen.preview(screen.system_card(SAMPLE_SYSTEM, now=1790376000), str(OUT / "lcd-system.png"), 2)
     screen.preview(screen.limits_card(SAMPLE_STATUS, 11.62, 3, now=1790376000),
                    str(OUT / "lcd-limits.png"), 2)
-    screen.preview(screen.spark_frames(1)[0], str(OUT / "lcd-spark.png"), 2)
     print("wrote", sorted(p.name for p in OUT.iterdir()))
 
 

@@ -239,6 +239,57 @@ def limits_card(status: dict, today_cost: float | None = None,
     return img.tobytes()
 
 
+SYSTEM = (90, 170, 220)
+
+
+def _gb(n) -> str:
+    return f"{n / 2**30:.0f}" if n >= 100 * 2**30 else f"{n / 2**30:.1f}"
+
+
+def _uptime(seconds: float) -> str:
+    m = int(seconds // 60)
+    d, h, m = m // 1440, m // 60 % 24, m % 60
+    return f"up {d}d {h}h" if d else f"up {h}h {m}m"
+
+
+def system_card(stats: dict, now: float | None = None) -> bytes:
+    """CPU, memory and disk. `stats` comes from sysinfo.sample()."""
+    img = Image.new("RGB", SIZE, BG)
+    d = ImageDraw.Draw(img)
+    x0, x1 = 7, SCREEN_W - 7
+    d.rectangle([0, 0, SCREEN_W, 22], fill=SYSTEM)
+    d.text((SCREEN_W // 2, 11), "system", fill=(255, 255, 255),
+           font=_font(17, True), anchor="mm")
+    cpu, mem, disk = stats.get("cpu"), stats.get("mem") or {}, stats.get("disk") or {}
+    cores, ghz = stats.get("cores"), stats.get("ghz")
+    cpu_detail = " · ".join(x for x in (f"{cores} cores" if cores else "",
+                                        f"{ghz:.1f} GHz" if ghz else "") if x)
+    gauges = [
+        ("cpu", cpu, cpu_detail),
+        ("memory", mem.get("percent"),
+         f"{_gb(mem['used'])} of {_gb(mem['total'])} GB" if mem.get("total") else ""),
+        ("disk", disk.get("percent"),
+         f"{_gb(disk['used'])} of {_gb(disk['total'])} GB" if disk.get("total") else ""),
+    ]
+    y = 22
+    for label, pct, detail in gauges:
+        _gauge(d, y, label, pct, detail, x0, x1)
+        y += 56
+    d.line([x0, y + 2, x1, y + 2], fill=(40, 40, 46))
+    host = stats.get("host") or ""
+    d.text((x0, y + 26), host[:14], fill=FG, font=_fitted(d, host[:14], 16, x1 - x0, True), anchor="ls")
+    small = _font(15)
+    clock = time.strftime("%H:%M", time.localtime(now or time.time()))
+    d.text((x1, SCREEN_H - 3), clock, fill=DIM, font=small, anchor="rs")
+    if stats.get("uptime"):
+        d.text((x0, SCREEN_H - 3), _uptime(stats["uptime"]), fill=DIM, font=small, anchor="ls")
+    return img.tobytes()
+
+
+def blank() -> bytes:
+    return Image.new("RGB", SIZE, (0, 0, 0)).tobytes()
+
+
 def preview(rgb: bytes, path: str, scale: int = 2) -> None:
     Image.frombytes("RGB", SIZE, rgb).resize(
         (SCREEN_W * scale, SCREEN_H * scale), Image.NEAREST).save(path)

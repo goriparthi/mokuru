@@ -324,6 +324,11 @@ class Daemon:
     # --- LCD screens -----------------------------------------------------------
 
     def _screen_key(self, kind: str) -> tuple:
+        if kind == "system":
+            from . import sysinfo
+            st = sysinfo.sample()
+            return ("system", int(st["cpu"] // 10), int(st["mem"]["percent"] // 5),
+                    int((st["disk"] or {}).get("percent", 0) // 5))
         s = self.status
         cost = float((s.get("cost") or {}).get("total_cost_usd") or 0)
         if kind == "usage":
@@ -336,6 +341,9 @@ class Daemon:
                 s.get("session_name"), int(self._context_pct() // 5), round(cost / 0.05))
 
     def _render(self, kind: str) -> bytes:
+        if kind == "system":
+            from . import sysinfo
+            return screen.system_card(sysinfo.sample(max_age=0))
         if kind == "usage":
             total, n = self.today_costs()
             return screen.limits_card(self.status, total, n)
@@ -346,17 +354,19 @@ class Daemon:
         screens = lcd.get("screens")
         if not screens:  # older config: one session card in "slot"
             screens = {str(lcd.get("slot", 0)): "session"}
-        return {str(k): v for k, v in screens.items() if v in ("session", "usage")}
+        return {str(k): v for k, v in screens.items() if v in ("session", "usage", "system")}
 
     def _maybe_lcd(self) -> None:
         lcd = self.cfg["lcd"]
-        if (not lcd["enabled"] or not self.status or self.state == "attention"
+        if (not lcd["enabled"] or self.state == "attention"
                 or self.kb.wireless):   # frames need the cable
             return
         if not self.kb.flash_ready():
             return
         now = time.time()
         for slot, kind in sorted(self._screens().items()):
+            if kind != "system" and not self.status:
+                continue
             key = self._screen_key(kind)
             if key == self.lcd_keys.get(slot):
                 continue
@@ -438,6 +448,12 @@ class Daemon:
             self._set_lcd_auto(False)
             self._upload_frames(frames, 0, delay)
             return {"frames": len(frames), "delay": delay}
+        if cmd == "blank":
+            self._need_kb()
+            slots = [int(x) for x in a.get("slots", [])]
+            for slot in slots:
+                self._upload_frames([screen.blank()], slot, 0)
+            return {"blanked": slots}
         if cmd == "lcd":
             self._set_lcd_auto(bool(a["enabled"]))
             self.lcd_keys.clear()
