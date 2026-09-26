@@ -88,3 +88,14 @@ def test_adapter_classification():
     assert classify("vEthernet (WSL (Hyper-V firewall))") is None
     assert classify("enp3s0") == "ethernet" and classify("wg0") == "vpn"
     assert classify("docker0") is None and classify("lo") is None
+
+
+def test_picture_zoom(tmp_path):
+    from PIL import Image
+    path = tmp_path / "tall.png"
+    Image.new("RGB", (768, 1024), (200, 50, 50)).save(path)
+    full = screen.load_image(str(path), 1.0)
+    zoomed = screen.load_image(str(path), 0.5)
+    assert len(full) == len(zoomed) == 135 * 240 * 3
+    assert full[:3] == bytes((200, 50, 50))       # filled to the corner
+    assert zoomed[:3] == bytes((0, 0, 0))         # black band at the top

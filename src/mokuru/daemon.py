@@ -449,7 +449,8 @@ class Daemon:
             if self.cfg["lcd"]["enabled"] and str(slot) in live:
                 raise ValueError(f"slot {slot} shows the {live[str(slot)]} screen; "
                                  f"use a free slot or change lcd.screens")
-            rgb = screen.test_pattern() if a["path"] == "test" else screen.load_image(a["path"])
+            rgb = (screen.test_pattern() if a["path"] == "test"
+                   else screen.load_image(a["path"], float(a.get("zoom", 1.0))))
             self._upload_frames([rgb], slot, 0)
             return {"slot": slot}
         if cmd == "blank":

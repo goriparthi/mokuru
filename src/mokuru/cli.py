@@ -191,6 +191,8 @@ def build_parser() -> argparse.ArgumentParser:
     ip.add_argument("file", help="image file, or 'test'")
     ip.add_argument("--slot", type=int, default=3, choices=range(SCREEN_SLOTS),
                     help="picture slot (default 3; 0-2 hold the live screens)")
+    ip.add_argument("--zoom", type=float, default=1.0,
+                    help="1 fills the screen (crops edges), 0 shows the whole picture; e.g. 0.5")
 
     cp = sub.add_parser("lcd", help="Claude/system screens on the LCD: usage (on), off, or blank SLOTS")
     cp.add_argument("mode", choices=["usage", "off", "blank"])
@@ -256,7 +258,7 @@ def main(argv=None) -> int:
     if c == "image":
         path = args.file if args.file == "test" else os.path.abspath(args.file)
         t = time.monotonic()
-        cmd("image", path=path, slot=args.slot)
+        cmd("image", path=path, slot=args.slot, zoom=args.zoom)
         print(f"uploaded to slot {args.slot} in {time.monotonic() - t:.0f}s")
         return 0
     if c == "lcd":

@@ -41,9 +41,22 @@ def fit(img: Image.Image) -> bytes:
     return ImageOps.fit(img.convert("RGB"), SIZE, Image.LANCZOS).tobytes()
 
 
-def load_image(path: str) -> bytes:
+def load_image(path: str, zoom: float = 1.0) -> bytes:
+    """`zoom` 1.0 fills the screen (cropping); 0.0 shows the whole picture
+    with black bands; in between trades one for the other."""
     with Image.open(path) as img:
-        return fit(img)
+        if zoom >= 1.0:
+            return fit(img)
+        img = img.convert("RGB")
+        w, h = img.size
+        contain = min(SCREEN_W / w, SCREEN_H / h)
+        cover = max(SCREEN_W / w, SCREEN_H / h)
+        scale = contain + (cover - contain) * max(0.0, zoom)
+        sw, sh = max(1, round(w * scale)), max(1, round(h * scale))
+        small = img.resize((sw, sh), Image.LANCZOS)
+        out = Image.new("RGB", SIZE, (0, 0, 0))
+        out.paste(small, ((SCREEN_W - sw) // 2, (SCREEN_H - sh) // 2))
+        return out.tobytes()
 
 
 def test_pattern() -> bytes:

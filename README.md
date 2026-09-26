@@ -68,6 +68,7 @@ mokuru light static --color 00ffcc        # any colour
 mokuru light breathing --color d97757 --speed 1
 mokuru light off
 mokuru image photo.jpg                    # your picture in a free slot (~20 s)
+mokuru image photo.jpg --zoom 0.5         # zoom out: less cropping, thin black bands
 mokuru lcd usage | off                    # the live screens on the LCD
 mokuru lcd blank 2 3 4                    # clear leftover pictures from slots
 mokuru clock                              # set the LCD clock (the daemon also does this daily)
