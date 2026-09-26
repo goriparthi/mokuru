@@ -10,15 +10,35 @@ Runs on Windows, macOS and Linux.
 - Your keys show what Claude is doing: Claude-orange while it works (with the
   context window filling up across F1–F12), red when it needs your permission,
   a green flash when it's done, then your own lighting comes back.
-- The 135×240 LCD gets two Claude screens (Fn + press the dial to flip between them):
-  a **session card** (model, session, context %, cost, lines changed) and a
-  **usage screen** (5-hour and weekly plan limits with reset times, context
-  tokens, dollars spent today across all sessions).
+- The 135×240 LCD shows your **Claude usage**: 5-hour and weekly plan limits
+  with reset times, context, and dollars spent today (see below). A session
+  card sits one page over.
 - Set lighting effects, put pictures and animations on the LCD, set the clock.
 - **Ctrl + dial = app switcher** (Windows): hold Ctrl and turn to walk through
   windows like Alt+Tab, release Ctrl to pick one; Ctrl + press opens Task View.
   The dial alone is still volume.
 - A tray icon (optional) shows Claude's state and has quick controls.
+
+## The LCD usage screen
+
+<img src="docs/assets/lcd-limits.png" alt="Claude usage screen on the keyboard's LCD" width="200" align="right">
+
+The default screen, drawn from Claude Code's own status line:
+
+- **5 hour:** how much of your plan's 5-hour limit you've used, and when it
+  resets (shown whenever Claude Code reports it)
+- **week:** your weekly limit and its reset time
+- **context:** how full the current session's context window is, in percent
+  and tokens
+- **today:** dollars spent today across all your sessions, and how many
+  sessions there were
+
+Bars turn yellow at 70% and red at 90%. Press **Fn + dial** to flip to the
+session card (model, session, cost, lines changed) or the keyboard's clock.
+Each screen is redrawn only when its numbers change, at most every 5 minutes
+(about 20 s per upload, spaced to spare the keyboard's flash).
+
+<br clear="right">
 
 ## Install
 
@@ -105,7 +125,7 @@ mkdir -p "$HOME/.mokuru" && printf '%s' "$payload" > "$HOME/.mokuru/status.json"
   "done_hold": 4.0,
   "dial_switcher": true,
   "colors": {"working": [217, 119, 87], "attention": [255, 0, 0], "done": [0, 220, 60]},
-  "lcd": {"enabled": true, "screens": {"0": "session", "1": "usage"}, "min_interval": 300}
+  "lcd": {"enabled": true, "screens": {"0": "usage", "1": "session"}, "min_interval": 300}
 }
 ```
 

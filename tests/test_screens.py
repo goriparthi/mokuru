@@ -50,8 +50,8 @@ def test_each_screen_uploads_once_per_change(tmp_path, monkeypatch):
     d.kb, d.status = FakeKb(), dict(STATUS)
     for _ in range(4):
         d._maybe_lcd()
-    assert d.kb.uploads == [0, 1]               # session, then usage; then nothing new
+    assert d.kb.uploads == [0, 1]               # usage, then session; then nothing new
     d.cfg["lcd"]["min_interval"] = 0
     d.status = {**STATUS, "rate_limits": {"seven_day": {"used_percentage": 40}}}
     d._maybe_lcd()
-    assert d.kb.uploads == [0, 1, 1]            # only the usage screen changed
+    assert d.kb.uploads == [0, 1, 0]            # only the usage screen (slot 0) changed
