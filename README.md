@@ -10,7 +10,10 @@ Runs on Windows, macOS and Linux.
 - Your keys show what Claude is doing: Claude-orange while it works (with the
   context window filling up across F1–F12), red when it needs your permission,
   a green flash when it's done, then your own lighting comes back.
-- The 135×240 LCD shows a usage card: model, session, context %, cost, lines changed.
+- The 135×240 LCD gets two Claude screens (Fn + press the dial to flip between them):
+  a **session card** (model, session, context %, cost, lines changed) and a
+  **usage screen** (5-hour and weekly plan limits with reset times, context
+  tokens, dollars spent today across all sessions).
 - Set lighting effects, put pictures and animations on the LCD, set the clock.
 - **Ctrl + dial = app switcher** (Windows): hold Ctrl and turn to walk through
   windows like Alt+Tab, release Ctrl to pick one; Ctrl + press opens Task View.
@@ -42,7 +45,7 @@ mokuru light off
 mokuru image photo.jpg --slot 0           # still picture, cropped to fit (~20 s)
 mokuru gif cat.gif                        # animation, up to 5 frames (~20 s per frame)
 mokuru gif claude                         # built-in Claude spark animation
-mokuru lcd usage | off                    # usage card on the LCD
+mokuru lcd usage | off                    # the Claude screens on the LCD
 mokuru clock                              # set the LCD clock (the daemon also does this daily)
 mokuru pause | resume                     # stop/start reacting to Claude Code
 mokuru status                             # daemon state as JSON
@@ -102,7 +105,7 @@ mkdir -p "$HOME/.mokuru" && printf '%s' "$payload" > "$HOME/.mokuru/status.json"
   "done_hold": 4.0,
   "dial_switcher": true,
   "colors": {"working": [217, 119, 87], "attention": [255, 0, 0], "done": [0, 220, 60]},
-  "lcd": {"enabled": true, "slot": 0, "min_interval": 300}
+  "lcd": {"enabled": true, "screens": {"0": "session", "1": "usage"}, "min_interval": 300}
 }
 ```
 

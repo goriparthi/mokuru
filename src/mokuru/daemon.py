@@ -84,8 +84,10 @@ class Daemon:
         self.per_key_level: int | None = None
         self.status: dict = {}
         self._status_mtime = 0.0
-        self.lcd_last_upload = 0.0
-        self.lcd_last_key = None
+        self.lcd_last_upload = 0.0     # most recent upload of any screen
+        self.lcd_keys: dict[str, tuple] = {}     # slot -> what it last showed
+        self.lcd_times: dict[str, float] = {}    # slot -> when
+        self.costs: dict = self._load_costs()
         self.lcd_busy = False
         self.last_error = ""
         self._last_connect_try = 0.0
@@ -120,7 +122,8 @@ class Daemon:
             "per_key_level": self.per_key_level,
             "context_pct": self._context_pct(),
             "lcd": {"enabled": self.cfg["lcd"]["enabled"], "busy": self.lcd_busy,
-                    "last_upload": self.lcd_last_upload},
+                    "screens": self._screens(), "last_upload": self.lcd_last_upload},
+            "today": dict(zip(("cost", "sessions"), self.today_costs())),
             "error": self.last_error,
         }
 
@@ -275,7 +278,8 @@ class Daemon:
             self.status = json.loads(path.read_text(encoding="utf-8"))
             self._status_mtime = mtime
         except (OSError, ValueError):
-            pass
+            return
+        self._record_cost(self.status)
 
     def _context_pct(self) -> float:
         try:
@@ -283,28 +287,85 @@ class Daemon:
         except (TypeError, ValueError):
             return 0.0
 
-    def _lcd_key(self):
+    # --- dollars per day ------------------------------------------------------
+
+    @staticmethod
+    def _load_costs() -> dict:
+        try:
+            return json.loads(config.COSTS_FILE.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+
+    def _record_cost(self, status: dict) -> None:
+        """Each session's cost is cumulative; keep the latest per session per day."""
+        sid = status.get("session_id")
+        try:
+            cost = float((status.get("cost") or {}).get("total_cost_usd") or 0)
+        except (TypeError, ValueError):
+            return
+        if not sid:
+            return
+        day = time.strftime("%Y-%m-%d")
+        today = self.costs.setdefault(day, {})
+        if today.get(sid) == cost:
+            return
+        today[sid] = max(cost, today.get(sid, 0.0))
+        for old in sorted(self.costs)[:-30]:   # keep a month
+            del self.costs[old]
+        try:
+            config.COSTS_FILE.write_text(json.dumps(self.costs), encoding="utf-8")
+        except OSError:
+            pass
+
+    def today_costs(self) -> tuple[float, int]:
+        today = self.costs.get(time.strftime("%Y-%m-%d"), {})
+        return sum(today.values()), len(today)
+
+    # --- LCD screens -----------------------------------------------------------
+
+    def _screen_key(self, kind: str) -> tuple:
         s = self.status
         cost = float((s.get("cost") or {}).get("total_cost_usd") or 0)
-        return ((s.get("model") or {}).get("display_name"),
-                int(self._context_pct() // 5), round(cost / 0.05))
+        if kind == "usage":
+            lim = s.get("rate_limits") or {}
+            pct = lambda k: (lim.get(k) or {}).get("used_percentage")  # noqa: E731
+            total, n = self.today_costs()
+            return ("usage", pct("five_hour"), pct("seven_day"),
+                    int(self._context_pct() // 5), round(total / 0.05), n)
+        return ("session", (s.get("model") or {}).get("display_name"),
+                s.get("session_name"), int(self._context_pct() // 5), round(cost / 0.05))
+
+    def _render(self, kind: str) -> bytes:
+        if kind == "usage":
+            total, n = self.today_costs()
+            return screen.limits_card(self.status, total, n)
+        return screen.usage_card(self.status, self.state)
+
+    def _screens(self) -> dict[str, str]:
+        lcd = self.cfg["lcd"]
+        screens = lcd.get("screens")
+        if not screens:  # older config: one session card in "slot"
+            screens = {str(lcd.get("slot", 0)): "session"}
+        return {str(k): v for k, v in screens.items() if v in ("session", "usage")}
 
     def _maybe_lcd(self) -> None:
         lcd = self.cfg["lcd"]
         if (not lcd["enabled"] or not self.status or self.state == "attention"
                 or self.kb.wireless):   # frames need the cable
             return
-        key = self._lcd_key()
-        if key == self.lcd_last_key:
-            return
-        if time.time() - self.lcd_last_upload < lcd["min_interval"]:
-            return
         if not self.kb.flash_ready():
             return
-        card = screen.usage_card(self.status, self.state)
-        self._upload_frames([card], lcd["slot"], delay=0)
-        self.lcd_last_key = key
-        self.lcd_last_upload = time.time()
+        now = time.time()
+        for slot, kind in sorted(self._screens().items()):
+            key = self._screen_key(kind)
+            if key == self.lcd_keys.get(slot):
+                continue
+            if now - self.lcd_times.get(slot, 0) < lcd["min_interval"]:
+                continue
+            self._upload_frames([self._render(kind)], int(slot), delay=0)
+            self.lcd_keys[slot] = key
+            self.lcd_times[slot] = self.lcd_last_upload = time.time()
+            return  # one screen per pass; the flash cool-down spaces the next
 
     def _between_pages(self) -> None:
         """Mid-upload: keep the lights honest without touching flash."""
@@ -379,8 +440,8 @@ class Daemon:
             return {"frames": len(frames), "delay": delay}
         if cmd == "lcd":
             self._set_lcd_auto(bool(a["enabled"]))
-            self.lcd_last_key = None
-            self.lcd_last_upload = 0
+            self.lcd_keys.clear()
+            self.lcd_times.clear()
             return {"lcd": self.cfg["lcd"]}
         if cmd in ("pause", "resume"):
             config.set_paused(cmd == "pause")

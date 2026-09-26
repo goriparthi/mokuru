@@ -56,7 +56,10 @@
   @keyframes cycle { 0% { opacity: 0 } 3% { opacity: 1 } 25% { opacity: 1 } 28% { opacity: 0 } 100% { opacity: 0 } }
   .lcd { border-radius: 14px; padding: 8px; background: #09090b; border: 1px solid var(--line);
          box-shadow: 0 20px 40px rgba(0,0,0,.5), inset 0 0 0 1px #000; }
-  .lcd img { display: block; width: 100%; border-radius: 6px; image-rendering: auto; }
+  .lcd .screens { position: relative; aspect-ratio: 135 / 240; }
+  .lcd img { position: absolute; inset: 0; display: block; width: 100%; border-radius: 6px; }
+  .lcd img + img { animation: flip 12s infinite; opacity: 0; }
+  @keyframes flip { 0%, 45% { opacity: 0 } 50%, 95% { opacity: 1 } 100% { opacity: 0 } }
   .lcd-cap { font-size: 12px; color: var(--dim); text-align: center; margin-top: 8px; }
   .states { display: flex; gap: 10px; justify-content: center; margin-top: 26px; flex-wrap: wrap; }
   .chip { font-size: 13px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line);
@@ -66,7 +69,7 @@
   .chip:nth-child(3) { animation-delay: 8s; }  .chip:nth-child(4) { animation-delay: 12s; }
   @keyframes chip { 0%, 27% { color: var(--fg); border-color: #55555f; background: var(--card) } 28%, 100% { } }
   @media (prefers-reduced-motion: reduce) {
-    .board img, .chip { animation: none; }
+    .board img, .chip, .lcd img + img { animation: none; }
     .board img:nth-child(2) { opacity: 1; }
   }
 
@@ -154,7 +157,10 @@
         <img src="assets/keyboard-done.svg" alt="Done: green">
       </div>
       <div>
-        <div class="lcd"><img src="assets/lcd-usage.png" alt="LCD usage card: model, session, context 42%, cost $3.18"></div>
+        <div class="lcd"><div class="screens">
+          <img src="assets/lcd-usage.png" alt="LCD session card: model, session, context 42%, cost $3.18">
+          <img src="assets/lcd-limits.png" alt="LCD usage screen: 5-hour and weekly plan limits, context, dollars today">
+        </div></div>
         <div class="lcd-cap">the keyboard's own LCD</div>
       </div>
     </div>
@@ -178,8 +184,9 @@
           Then your own lighting comes back.</p></div>
       <div class="card"><div class="icon">▮▮▮</div><h3>Context bar on F1–F12</h3>
         <p>The function row fills green to red as the context window fills up, so you can see how much room is left.</p></div>
-      <div class="card"><div class="icon">▣</div><h3>Usage card on the LCD</h3>
-        <p>Model, session, context and cost, drawn on the keyboard's 135×240 screen from Claude Code's status line.</p></div>
+      <div class="card"><div class="icon">▣</div><h3>Two Claude screens on the LCD</h3>
+        <p>A session card (model, context, cost, lines changed) and a usage screen (5-hour and weekly
+          plan limits, context, dollars today). Flip between them with Fn + dial press.</p></div>
       <div class="card"><div class="icon">⟳</div><h3>Ctrl + dial = app switcher</h3>
         <p>Hold Ctrl and turn the dial to step through your windows like Alt+Tab. Release to pick one.
           The dial alone is still volume.</p></div>

@@ -22,8 +22,11 @@ LAYOUT = json.loads((ROOT / "tools" / "ak8753_layout.json").read_text(encoding="
 SAMPLE_STATUS = {
     "model": {"display_name": "Opus 5.5"},
     "session_name": "mokuru",
-    "context_window": {"used_percentage": 42},
+    "context_window": {"used_percentage": 42, "total_input_tokens": 84000,
+                       "context_window_size": 200000},
     "cost": {"total_cost_usd": 3.18, "total_lines_added": 1284, "total_lines_removed": 97},
+    "rate_limits": {"five_hour": {"used_percentage": 18, "resets_at": 1790384400},
+                    "seven_day": {"used_percentage": 34, "resets_at": 1790665200}},
 }
 
 
@@ -91,6 +94,8 @@ def main() -> None:
     for state in ("idle", "working", "attention", "done"):
         (OUT / f"keyboard-{state}.svg").write_text(keyboard_svg(state), encoding="utf-8", newline="\n")
     screen.preview(screen.usage_card(SAMPLE_STATUS, now=1790376000), str(OUT / "lcd-usage.png"), 2)
+    screen.preview(screen.limits_card(SAMPLE_STATUS, 11.62, 3, now=1790376000),
+                   str(OUT / "lcd-limits.png"), 2)
     screen.preview(screen.spark_frames(1)[0], str(OUT / "lcd-spark.png"), 2)
     print("wrote", sorted(p.name for p in OUT.iterdir()))
 

@@ -10,6 +10,7 @@ STATE_DIR = Path(os.environ.get("MOKURU_HOME") or Path.home() / ".mokuru")
 CONFIG_FILE = STATE_DIR / "config.json"
 BASELINE_FILE = STATE_DIR / "baseline.json"
 STATUS_FILE = STATE_DIR / "status.json"
+COSTS_FILE = STATE_DIR / "costs.json"
 PAUSED_FILE = STATE_DIR / "paused"
 PID_FILE = STATE_DIR / "daemon.pid"
 PORT_FILE = STATE_DIR / "daemon.port"
@@ -27,9 +28,11 @@ DEFAULTS = {
         "done": [0, 220, 60],
     },
     "lcd": {
-        "enabled": True,       # usage card from the status line
-        "slot": 0,
-        "min_interval": 300,   # seconds between uploads (each is ~20 s of flash)
+        "enabled": True,       # Claude screens from the status line
+        # LCD slot -> screen: "session" (model, context, cost, lines) or
+        # "usage" (plan limits, context, dollars today)
+        "screens": {"0": "session", "1": "usage"},
+        "min_interval": 300,   # seconds between uploads of one screen (~20 s of flash each)
     },
 }
 
