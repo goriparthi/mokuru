@@ -30,8 +30,9 @@ DEFAULTS = {
     "lcd": {
         "enabled": True,       # Claude screens from the status line
         # LCD slot -> screen: "usage" (Claude plan limits, context, dollars
-        # today), "system" (CPU, memory, disk) or "session". Slot 0 shows first.
-        "screens": {"0": "usage", "1": "system"},
+        # today), "system" (CPU, memory, disk), "network" (speeds, totals,
+        # link) or "session". Slot 0 shows first.
+        "screens": {"0": "usage", "1": "system", "2": "network"},
         "min_interval": 300,   # seconds between uploads of one screen (~20 s of flash each)
     },
 }

@@ -189,13 +189,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     ip = sub.add_parser("image", help="put a picture on the LCD (~20 s)")
     ip.add_argument("file", help="image file, or 'test'")
-    ip.add_argument("--slot", type=int, default=0, choices=range(SCREEN_SLOTS))
-
-    gp = sub.add_parser("gif", help="put an animation on the LCD (~20 s a frame)")
-    gp.add_argument("file", help="GIF file, or 'claude' for the built-in spark")
-    gp.add_argument("--frames", type=int, default=SCREEN_SLOTS,
-                    help=f"frames to keep (max {SCREEN_SLOTS}; uses slots 1..N)")
-    gp.add_argument("--delay", type=int, help="frame delay in 10 ms units (default: from the GIF)")
+    ip.add_argument("--slot", type=int, default=3, choices=range(SCREEN_SLOTS),
+                    help="picture slot (default 3; 0-2 hold the live screens)")
 
     cp = sub.add_parser("lcd", help="Claude/system screens on the LCD: usage (on), off, or blank SLOTS")
     cp.add_argument("mode", choices=["usage", "off", "blank"])
@@ -262,14 +257,7 @@ def main(argv=None) -> int:
         path = args.file if args.file == "test" else os.path.abspath(args.file)
         t = time.monotonic()
         cmd("image", path=path, slot=args.slot)
-        print(f"uploaded in {time.monotonic() - t:.0f}s (usage card turned off; `mokuru lcd usage` to restore)")
-        return 0
-    if c == "gif":
-        path = args.file if args.file == "claude" else os.path.abspath(args.file)
-        t = time.monotonic()
-        res = cmd("gif", path=path, frames=min(args.frames, SCREEN_SLOTS), delay=args.delay)
-        print(f"{res['frames']} frames uploaded in {time.monotonic() - t:.0f}s "
-              f"(usage card turned off; `mokuru lcd usage` to restore)")
+        print(f"uploaded to slot {args.slot} in {time.monotonic() - t:.0f}s")
         return 0
     if c == "lcd":
         if args.mode == "blank":

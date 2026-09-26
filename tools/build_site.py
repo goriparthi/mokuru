@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import colorsys
+import math
 import html
 import json
 import sys
@@ -35,6 +36,15 @@ SAMPLE_SYSTEM = {
     "mem": {"percent": 58, "used": 18.6 * 2**30, "total": 32 * 2**30},
     "disk": {"percent": 46, "used": 438 * 2**30, "total": 953 * 2**30},
     "uptime": 2 * 86400 + 5 * 3600,
+}
+
+
+SAMPLE_NETWORK = {
+    "rx": 3.1e6, "tx": 2.4e5,
+    "history": [(2.2e6 + 1.4e6 * math.sin(i / 5) ** 2 + (i % 7) * 6e4,
+                 1.6e5 + 1.2e5 * math.cos(i / 8) ** 2) for i in range(60)],
+    "recv_total": 18.4 * 2**30, "sent_total": 3.2 * 2**30,
+    "ssid": "home-wifi", "ip": "192.168.1.20",
 }
 
 
@@ -102,6 +112,7 @@ def main() -> None:
     for state in ("idle", "working", "attention", "done"):
         (OUT / f"keyboard-{state}.svg").write_text(keyboard_svg(state), encoding="utf-8", newline="\n")
     screen.preview(screen.system_card(SAMPLE_SYSTEM, now=1790376000), str(OUT / "lcd-system.png"), 2)
+    screen.preview(screen.network_card(SAMPLE_NETWORK, now=1790376000), str(OUT / "lcd-network.png"), 2)
     screen.preview(screen.limits_card(SAMPLE_STATUS, 11.62, 3, now=1790376000),
                    str(OUT / "lcd-limits.png"), 2)
     print("wrote", sorted(p.name for p in OUT.iterdir()))

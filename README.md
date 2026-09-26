@@ -2,43 +2,47 @@
 
 **[goriparthi.github.io/mokuru](https://goriparthi.github.io/mokuru/)**: see it in action
 
-Lights and LCD for the **MOKURU AK8753** keyboard, with **Claude Code** integration.
-Runs on Windows, macOS and Linux.
+An open-source companion app for the **MOKURU AK8753** keyboard: live screens
+on its LCD, lighting you can script, a dial that switches apps, and keys that
+show what **Claude Code** is doing. Runs on Windows, macOS and Linux.
 
 [![mokuru: the keyboard while Claude is working](docs/assets/keyboard-working.svg)](https://goriparthi.github.io/mokuru/)
 
-- Your keys show what Claude is doing: Claude-orange while it works (with the
-  context window filling up across F1–F12), red when it needs your permission,
-  a green flash when it's done, then your own lighting comes back.
-- The 135×240 LCD shows your **Claude usage**: 5-hour and weekly plan limits
-  with reset times, context, and dollars spent today (see below). A **system**
-  screen with CPU, memory and disk sits one page over.
-- Set lighting effects, put pictures and animations on the LCD, set the clock.
+- **Live LCD screens:** Claude usage, system (CPU, memory, disk) and network,
+  on the keyboard's 135×240 screen. Press Fn + dial to flip through them.
+- **Lighting:** every effect the keyboard has, in any colour and speed, from
+  the command line or the tray. Your lighting is what the board returns to.
 - **Ctrl + dial = app switcher** (Windows): hold Ctrl and turn to walk through
   windows like Alt+Tab, release Ctrl to pick one; Ctrl + press opens Task View.
   The dial alone is still volume.
-- A tray icon (optional) shows Claude's state and has quick controls.
+- **Claude Code on your keys** (optional): Claude-orange while it works, with
+  the context window filling up across F1–F12, red when it needs your
+  permission, and a green flash when it's done.
+- **Cable or 2.4 GHz:** lighting works through the wireless dongle too, with
+  a battery readout.
+- **Tray icon and autostart**, your own pictures on the LCD, and a clock that
+  stays synced.
 
-## The LCD usage screen
+## LCD screens
 
-<img src="docs/assets/lcd-limits.png" alt="Claude usage screen on the keyboard's LCD" width="200" align="right">
+<table>
+<tr>
+<td align="center" width="33%"><img src="docs/assets/lcd-limits.png" alt="Claude usage screen" width="160"><br><b>Claude usage</b></td>
+<td align="center" width="33%"><img src="docs/assets/lcd-system.png" alt="System screen" width="160"><br><b>System</b></td>
+<td align="center" width="33%"><img src="docs/assets/lcd-network.png" alt="Network screen" width="160"><br><b>Network</b></td>
+</tr>
+<tr>
+<td valign="top">5-hour and weekly plan limits with reset times, context used (percent and tokens), and dollars spent today across all sessions. Drawn from Claude Code's own status line.</td>
+<td valign="top">CPU load, core count and clock; memory and disk in use; machine name and uptime.</td>
+<td valign="top">Download and upload speed with the last few minutes graphed, data since boot, Wi-Fi name (or adapter) and IP.</td>
+</tr>
+</table>
 
-The default screen, drawn from Claude Code's own status line:
-
-- **5 hour:** how much of your plan's 5-hour limit you've used, and when it
-  resets (shown whenever Claude Code reports it)
-- **week:** your weekly limit and its reset time
-- **context:** how full the current session's context window is, in percent
-  and tokens
-- **today:** dollars spent today across all your sessions, and how many
-  sessions there were
-
-Bars turn yellow at 70% and red at 90%. Press **Fn + dial** to flip to the
-system screen (CPU, memory, disk, uptime) or the keyboard's clock.
-Each screen is redrawn only when its numbers change, at most every 5 minutes
-(about 20 s per upload, spaced to spare the keyboard's flash).
-
-<br clear="right">
+Bars turn yellow at 70% and red at 90%. The keyboard keeps its own clock
+page too. Each screen redraws only when its numbers move (the network screen
+when a speed doubles or halves), at most every 5 minutes. An upload takes
+about 20 s and is spaced to spare the keyboard's flash. Slots 3 and 4 are
+free for your own pictures (`mokuru image`).
 
 ## Install
 
@@ -47,9 +51,9 @@ pipx install "git+https://github.com/goriparthi/mokuru.git#egg=mokuru[tray]"
 # or, from a clone:  pip install -e ".[tray]"
 
 mokuru info                 # finds the keyboard (plug it in by USB cable)
-mokuru install hooks        # Claude Code hooks in ~/.claude/settings.json
-mokuru install statusline   # feeds the LCD usage card (see below)
 mokuru install autostart    # start the tray/daemon at login
+mokuru install hooks        # optional: Claude Code hooks in ~/.claude/settings.json
+mokuru install statusline   # optional: feeds the Claude usage screen
 ```
 
 Linux also needs a udev rule so you can open the keyboard without root:
@@ -62,8 +66,8 @@ mokuru light wave                         # rainbow wave (no --color = rainbow)
 mokuru light static --color 00ffcc        # any colour
 mokuru light breathing --color d97757 --speed 1
 mokuru light off
-mokuru image photo.jpg --slot 0           # still picture, cropped to fit (~20 s)
-mokuru lcd usage | off                    # the usage and system screens on the LCD
+mokuru image photo.jpg                    # your picture in a free slot (~20 s)
+mokuru lcd usage | off                    # the live screens on the LCD
 mokuru lcd blank 2 3 4                    # clear leftover pictures from slots
 mokuru clock                              # set the LCD clock (the daemon also does this daily)
 mokuru pause | resume                     # stop/start reacting to Claude Code
@@ -124,7 +128,7 @@ mkdir -p "$HOME/.mokuru" && printf '%s' "$payload" > "$HOME/.mokuru/status.json"
   "done_hold": 4.0,
   "dial_switcher": true,
   "colors": {"working": [217, 119, 87], "attention": [255, 0, 0], "done": [0, 220, 60]},
-  "lcd": {"enabled": true, "screens": {"0": "usage", "1": "system"}, "min_interval": 300}
+  "lcd": {"enabled": true, "screens": {"0": "usage", "1": "system", "2": "network"}, "min_interval": 300}
 }
 ```
 
@@ -147,8 +151,8 @@ mkdir -p "$HOME/.mokuru" && printf '%s' "$payload" > "$HOME/.mokuru/status.json"
 - **LCD updates are slow**, about 20 s for a full frame. A smaller box doesn't
   help: it replaces the picture rather than patching it.
 - **LCD pages.** Fn + pressing the dial cycles the screen's pages (clock,
-  pictures, …). Animations are experimental: frames go into slots 1..N and
-  the keyboard loops them, but the playback details aren't fully worked out.
+  pictures). Animations aren't supported: this keyboard plays multi-frame
+  uploads back shifted, so mokuru only writes still pictures.
 - **Never sent:** `0xAC` (erases every stored picture), `0x7F`/`0x30` (firmware
   boot entry). `mokuru.device.packet()` refuses them.
 

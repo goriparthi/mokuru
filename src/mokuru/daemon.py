@@ -8,6 +8,7 @@ patterns, LCD frames) are rate limited and never run back to back.
 from __future__ import annotations
 
 import json
+import math
 import os
 import queue
 import threading
@@ -323,7 +324,18 @@ class Daemon:
 
     # --- LCD screens -----------------------------------------------------------
 
+    @staticmethod
+    def _rate_bucket(bps: float) -> int:
+        """0 below 100 kb/s, then one step per doubling: idle links don't redraw."""
+        bits = bps * 8
+        return 0 if bits < 1e5 else int(math.log2(bits / 1e5)) + 1
+
     def _screen_key(self, kind: str) -> tuple:
+        if kind == "network":
+            from . import sysinfo
+            n = sysinfo.network()
+            return ("network", self._rate_bucket(n["rx"]), self._rate_bucket(n["tx"]),
+                    n.get("ssid") or n.get("iface"), n.get("ip"))
         if kind == "system":
             from . import sysinfo
             st = sysinfo.sample()
@@ -341,6 +353,9 @@ class Daemon:
                 s.get("session_name"), int(self._context_pct() // 5), round(cost / 0.05))
 
     def _render(self, kind: str) -> bytes:
+        if kind == "network":
+            from . import sysinfo
+            return screen.network_card(sysinfo.network())
         if kind == "system":
             from . import sysinfo
             return screen.system_card(sysinfo.sample(max_age=0))
@@ -354,7 +369,7 @@ class Daemon:
         screens = lcd.get("screens")
         if not screens:  # older config: one session card in "slot"
             screens = {str(lcd.get("slot", 0)): "session"}
-        return {str(k): v for k, v in screens.items() if v in ("session", "usage", "system")}
+        return {str(k): v for k, v in screens.items() if v in ("session", "usage", "system", "network")}
 
     def _maybe_lcd(self) -> None:
         lcd = self.cfg["lcd"]
@@ -434,20 +449,14 @@ class Daemon:
             return {}
         if cmd == "image":
             self._need_kb()
+            slot = int(a.get("slot", 3))
+            live = self._screens()
+            if self.cfg["lcd"]["enabled"] and str(slot) in live:
+                raise ValueError(f"slot {slot} shows the {live[str(slot)]} screen; "
+                                 f"use a free slot or change lcd.screens")
             rgb = screen.test_pattern() if a["path"] == "test" else screen.load_image(a["path"])
-            self._set_lcd_auto(False)
-            self._upload_frames([rgb], int(a.get("slot", 0)), 0)
-            return {}
-        if cmd == "gif":
-            self._need_kb()
-            if a["path"] == "claude":
-                frames, delay_ms = screen.spark_frames(int(a.get("frames", SCREEN_SLOTS))), 120
-            else:
-                frames, delay_ms = screen.load_gif(a["path"], int(a.get("frames", SCREEN_SLOTS)))
-            delay = max(1, min(255, int(a.get("delay") or delay_ms // 10)))
-            self._set_lcd_auto(False)
-            self._upload_frames(frames, 0, delay)
-            return {"frames": len(frames), "delay": delay}
+            self._upload_frames([rgb], slot, 0)
+            return {"slot": slot}
         if cmd == "blank":
             self._need_kb()
             slots = [int(x) for x in a.get("slots", [])]

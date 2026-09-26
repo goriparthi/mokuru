@@ -61,10 +61,6 @@ def run_tray() -> int:
         threading.Thread(target=daemon.command, daemon=True,
                          args=("lcd", {"enabled": not daemon.cfg["lcd"]["enabled"]})).start()
 
-    def claude_gif(icon, _):
-        threading.Thread(target=daemon.command, daemon=True,
-                         args=("gif", {"path": "claude"})).start()
-
     def preset(name):
         def go(icon, _):
             threading.Thread(target=daemon.command, daemon=True,
@@ -80,9 +76,8 @@ def run_tray() -> int:
         pystray.Menu.SEPARATOR,
         pystray.MenuItem("Pause Claude lighting", toggle_pause,
                          checked=lambda _: config.paused()),
-        pystray.MenuItem("Usage card on LCD", toggle_lcd,
+        pystray.MenuItem("Live screens on LCD", toggle_lcd,
                          checked=lambda _: daemon.cfg["lcd"]["enabled"]),
-        pystray.MenuItem("Put Claude animation on LCD", claude_gif),
         pystray.MenuItem("My lighting", pystray.Menu(
             *[pystray.MenuItem(n, preset(n)) for n in PRESETS])),
         pystray.Menu.SEPARATOR,

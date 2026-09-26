@@ -1,10 +1,10 @@
-"""Pictures for the 135x240 LCD: file/GIF loading, a usage card, a Claude mark."""
+"""Pictures for the 135x240 LCD: image loading and the live screens."""
 from __future__ import annotations
 
 import math
 import time
 
-from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageSequence
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 from .device import SCREEN_H, SCREEN_SLOTS, SCREEN_W
 
@@ -44,40 +44,6 @@ def fit(img: Image.Image) -> bytes:
 def load_image(path: str) -> bytes:
     with Image.open(path) as img:
         return fit(img)
-
-
-def load_gif(path: str, max_frames: int = SCREEN_SLOTS) -> tuple[list[bytes], int]:
-    """Frames (evenly sampled down to max_frames) and a delay in ms."""
-    with Image.open(path) as img:
-        frames = [f.copy() for f in ImageSequence.Iterator(img)]
-        durations = [f.info.get("duration", img.info.get("duration", 100)) or 100
-                     for f in frames]
-    total = sum(durations)
-    if len(frames) > max_frames:
-        step = len(frames) / max_frames
-        frames = [frames[int(i * step)] for i in range(max_frames)]
-    delay_ms = max(20, int(total / len(frames)))
-    return [fit(f) for f in frames], delay_ms
-
-
-def spark_frames(n: int = SCREEN_SLOTS) -> list[bytes]:
-    """A Claude-style spark that turns a little each frame."""
-    out = []
-    cx, cy = SCREEN_W // 2, 100
-    for k in range(n):
-        img = Image.new("RGB", SIZE, BG)
-        d = ImageDraw.Draw(img)
-        rot = k * (math.pi / 6) / n * 2
-        for i in range(12):
-            a = rot + i * math.pi / 6
-            r1, r2 = 14, 48 if i % 2 == 0 else 36
-            d.line([(cx + r1 * math.cos(a), cy + r1 * math.sin(a)),
-                    (cx + r2 * math.cos(a), cy + r2 * math.sin(a))],
-                   fill=CLAUDE, width=7)
-        d.text((SCREEN_W // 2, 190), "claude", fill=FG, font=_font(22, True), anchor="mm")
-        d.text((SCREEN_W // 2, 214), "is working", fill=DIM, font=_font(14), anchor="mm")
-        out.append(img.tobytes())
-    return out
 
 
 def test_pattern() -> bytes:
@@ -283,6 +249,82 @@ def system_card(stats: dict, now: float | None = None) -> bytes:
     d.text((x1, SCREEN_H - 3), clock, fill=DIM, font=small, anchor="rs")
     if stats.get("uptime"):
         d.text((x0, SCREEN_H - 3), _uptime(stats["uptime"]), fill=DIM, font=small, anchor="ls")
+    return img.tobytes()
+
+
+NETWORK = (140, 110, 220)
+DOWN_COL, UP_COL = (70, 200, 110), (90, 170, 220)
+
+
+def _rate(bps: float) -> tuple[str, str]:
+    """Bytes/s -> ("12.4", "Mb/s"), in bits like ISPs quote."""
+    bits = bps * 8
+    for unit, scale in (("Gb/s", 1e9), ("Mb/s", 1e6), ("kb/s", 1e3)):
+        if bits >= scale:
+            v = bits / scale
+            return (f"{v:.1f}" if v < 100 else f"{v:.0f}"), unit
+    return f"{bits:.0f}", "b/s"
+
+
+def _bytes(n: float) -> str:
+    for unit, scale in (("TB", 2**40), ("GB", 2**30), ("MB", 2**20), ("kB", 2**10)):
+        if n >= scale:
+            v = n / scale
+            return f"{v:.1f} {unit}" if v < 100 else f"{v:.0f} {unit}"
+    return f"{n:.0f} B"
+
+
+def _spark(d, box, values, color) -> None:
+    x0, y0, x1, y1 = box
+    d.rounded_rectangle(box, radius=3, outline=(50, 50, 56))
+    if len(values) < 2:
+        return
+    top = max(values) or 1.0
+    n = len(values)
+    pts = [(x0 + 2 + (x1 - x0 - 4) * i / (n - 1),
+            y1 - 2 - (y1 - y0 - 4) * v / top) for i, v in enumerate(values)]
+    fill = [(pts[0][0], y1 - 2)] + pts + [(pts[-1][0], y1 - 2)]
+    d.polygon(fill, fill=tuple(int(c * 0.35) for c in color))
+    d.line(pts, fill=color, width=2)
+
+
+def network_card(net: dict, now: float | None = None) -> bytes:
+    """Download/upload rates with recent history, totals, and the link."""
+    img = Image.new("RGB", SIZE, BG)
+    d = ImageDraw.Draw(img)
+    x0, x1 = 7, SCREEN_W - 7
+    d.rectangle([0, 0, SCREEN_W, 22], fill=NETWORK)
+    d.text((SCREEN_W // 2, 11), "network", fill=(255, 255, 255),
+           font=_font(17, True), anchor="mm")
+    hist = net.get("history") or []
+    y = 24
+    for label, key, idx, col in (("down", "rx", 0, DOWN_COL), ("up", "tx", 1, UP_COL)):
+        value, unit = _rate(float(net.get(key) or 0))
+        lab = _font(16)
+        d.text((x0, y + 23), label, fill=DIM, font=lab, anchor="ls")
+        ufont = _font(13)
+        uw = d.textlength(unit, font=ufont)
+        d.text((x1, y + 23), unit, fill=DIM, font=ufont, anchor="rs")
+        room = x1 - x0 - d.textlength(label, font=lab) - uw - 10
+        d.text((x1 - uw - 4, y + 25), value, fill=col,
+               font=_fitted(d, value, 28, room), anchor="rs")
+        _spark(d, (x0, y + 30, x1, y + 52), [h[idx] for h in hist], col)
+        y += 58
+    d.line([x0, y + 1, x1, y + 1], fill=(40, 40, 46))
+    d.text((x0, y + 19), "since boot", fill=DIM, font=_font(13), anchor="ls")
+    tot = f"↓{_bytes(net.get('recv_total') or 0)}  ↑{_bytes(net.get('sent_total') or 0)}"
+    d.text((x0, y + 38), tot, fill=FG, font=_fitted(d, tot, 15, x1 - x0, False), anchor="ls")
+    y += 44
+    name = net.get("ssid") or net.get("iface") or "offline"
+    d.text((x0, y + 20), name, fill=FG, font=_fitted(d, name, 16, x1 - x0, True), anchor="ls")
+    ip = net.get("ip") or ""
+    small = _font(15)
+    clock = time.strftime("%H:%M", time.localtime(now or time.time()))
+    d.text((x1, SCREEN_H - 3), clock, fill=DIM, font=small, anchor="rs")
+    if ip:
+        d.text((x0, SCREEN_H - 3), ip, fill=DIM,
+               font=_fitted(d, ip, 15, x1 - x0 - d.textlength(clock, font=small) - 6, False),
+               anchor="ls")
     return img.tobytes()
 
 
