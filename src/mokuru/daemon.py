@@ -87,6 +87,9 @@ class Daemon:
         self.lcd_last_upload = 0.0     # most recent upload of any screen
         self.lcd_keys: dict[str, tuple] = {}     # slot -> what it last showed
         self.lcd_times: dict[str, float] = {}    # slot -> when
+        # The keyboard jumps to whichever picture was written last, so after
+        # writing anything else we write the home screen again to land there.
+        self.rehome = False
         self.costs: dict = self._load_costs()
         self.lcd_busy = False
         self.last_error = ""
@@ -331,12 +334,12 @@ class Daemon:
             return ("network", tuple((l["kind"], l.get("ssid")) for l in n["links"]), n["ip"],
                     int(n["recv_total"] // half_gb), int(n["sent_total"] // half_gb),
                     # keep its clock no staler than the refresh allows (a minute at best)
-                    int(time.time() // max(60, 2 * float(self.cfg["lcd"]["min_interval"]))))
+                    int(time.time() // max(1800, 2 * float(self.cfg["lcd"]["min_interval"]))))
         if kind == "system":
             from . import sysinfo
             st = sysinfo.sample()
-            return ("system", int(st["cpu"] // 10), int(st["mem"]["percent"] // 5),
-                    int((st["disk"] or {}).get("percent", 0) // 5))
+            return ("system", int(st["cpu"] // 25), int(st["mem"]["percent"] // 10),
+                    int((st["disk"] or {}).get("percent", 0) // 10))
         s = self.status
         cost = float((s.get("cost") or {}).get("total_cost_usd") or 0)
         if kind == "usage":
@@ -375,18 +378,37 @@ class Daemon:
         if not self.kb.flash_ready():
             return
         now = time.time()
-        for slot, kind in sorted(self._screens().items()):
-            if kind != "system" and not self.status:
+        screens = self._screens()
+        home = self._home()
+        due = []
+        for slot, kind in screens.items():
+            if kind not in ("system", "network") and not self.status:
                 continue
             key = self._screen_key(kind)
             if key == self.lcd_keys.get(slot):
                 continue
             if now - self.lcd_times.get(slot, 0) < lcd["min_interval"]:
                 continue
-            self._upload_frames([self._render(kind)], int(slot), delay=0)
-            self.lcd_keys[slot] = key
-            self.lcd_times[slot] = self.lcd_last_upload = time.time()
-            return  # one screen per pass; the flash cool-down spaces the next
+            due.append((slot, kind, key))
+        others = [d for d in due if d[0] != home]
+        if others:                       # home goes last, so we end up there
+            slot, kind, key = others[0]
+        elif home in screens and (self.rehome or any(d[0] == home for d in due)):
+            kind = screens[home]
+            if kind not in ("system", "network") and not self.status:
+                return
+            slot, key = home, self._screen_key(kind)
+        else:
+            return
+        self._upload_frames([self._render(kind)], int(slot), delay=0)
+        self.lcd_keys[slot] = key
+        self.lcd_times[slot] = self.lcd_last_upload = time.time()
+        self.rehome = slot != home       # one screen per pass; cool-down spaces the next
+
+    def _home(self) -> str:
+        """The screen the LCD should rest on (default: the first, Claude usage)."""
+        home = str(self.cfg["lcd"].get("home", "0"))
+        return home if home in self._screens() else min(self._screens() or {"0": ""})
 
     def _between_pages(self) -> None:
         """Mid-upload: keep the lights honest without touching flash."""
@@ -453,12 +475,14 @@ class Daemon:
             rgb = (screen.test_pattern() if a["path"] == "test"
                    else screen.load_image(a["path"], float(a.get("zoom", 1.0))))
             self._upload_frames([rgb], slot, 0)
+            self.rehome = True
             return {"slot": slot}
         if cmd == "blank":
             self._need_kb()
             slots = [int(x) for x in a.get("slots", [])]
             for slot in slots:
                 self._upload_frames([screen.blank()], slot, 0)
+            self.rehome = bool(slots)
             return {"blanked": slots}
         if cmd == "lcd":
             self._set_lcd_auto(bool(a["enabled"]))

@@ -34,6 +34,9 @@ DEFAULTS = {
         # link) or "session". Slot 0 shows first.
         "screens": {"0": "usage", "1": "system", "2": "network"},
         "min_interval": 300,   # seconds between uploads of one screen (~20 s of flash each)
+        # The keyboard jumps to whichever picture was written last; after any
+        # other screen or picture is written, this one is written again.
+        "home": "0",
     },
 }
 

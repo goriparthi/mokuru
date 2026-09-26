@@ -51,11 +51,16 @@ def test_each_screen_uploads_once_per_change(tmp_path, monkeypatch):
     d.kb, d.status = FakeKb(), dict(STATUS)
     for _ in range(4):
         d._maybe_lcd()
-    assert d.kb.uploads == [0, 1]               # usage, then session; then nothing new
+    # the other screen first, then home (slot 0) last so the LCD lands on it
+    assert d.kb.uploads == [1, 0]
     d.cfg["lcd"]["min_interval"] = 0
     d.status = {**STATUS, "rate_limits": {"seven_day": {"used_percentage": 40}}}
     d._maybe_lcd()
-    assert d.kb.uploads == [0, 1, 0]            # only the usage screen (slot 0) changed
+    assert d.kb.uploads == [1, 0, 0]            # only home changed: no detour
+    d.status = {**STATUS, "session_name": "other"}
+    for _ in range(3):
+        d._maybe_lcd()
+    assert d.kb.uploads == [1, 0, 0, 1, 0]      # session card redrawn, then back home
 
 
 def test_system_card_renders():

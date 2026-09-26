@@ -43,6 +43,11 @@ page too. Each screen redraws only when its numbers move, at most every
 `lcd.min_interval` seconds (default 300); the network screen also redraws to
 keep its time current (every 10 minutes at the default).
 
+The keyboard shows whichever picture was written last, so after mokuru
+redraws another screen (or you upload a picture) it redraws the home screen
+too (`lcd.home`, the Claude usage screen by default) and the LCD comes back
+to it. System and network only redraw on bigger changes to keep that rare.
+
 Every redraw rewrites the screen's image in the keyboard's flash memory,
 which wears out after enough rewrites. Lowering `min_interval` makes the
 screens fresher at the cost of that wear; at 20 s a busy screen can be
