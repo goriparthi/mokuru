@@ -156,24 +156,25 @@ def _tokens(n) -> str:
 
 
 def _gauge(d, y: int, label: str, pct, detail: str, x0: int, x1: int) -> None:
-    """50 px: label + big % on one row, a bar, then a small detail line."""
-    small = _font(13)
-    d.text((x0, y + 20), label, fill=DIM, font=small, anchor="ls")
+    """54 px: label + big % on one row, a bar, then a detail line."""
+    small = _font(15)
+    d.text((x0, y + 21), label, fill=DIM, font=small, anchor="ls")
     if pct is None:
-        d.text((x1, y + 22), "–", fill=DIM, font=_font(22, True), anchor="rs")
+        d.text((x1, y + 23), "–", fill=DIM, font=_font(24, True), anchor="rs")
         pct_v, col = 0.0, DIM
     else:
         pct_v = float(pct)
         col = _level_color(pct_v)
         room = x1 - x0 - d.textlength(label, font=small) - 6
-        d.text((x1, y + 22), f"{pct_v:.0f}%", fill=col,
-               font=_fitted(d, f"{pct_v:.0f}%", 23, room), anchor="rs")
-    d.rounded_rectangle([x0, y + 26, x1, y + 34], radius=4, outline=(70, 70, 76))
+        d.text((x1, y + 23), f"{pct_v:.0f}%", fill=col,
+               font=_fitted(d, f"{pct_v:.0f}%", 26, room), anchor="rs")
+    d.rounded_rectangle([x0, y + 27, x1, y + 36], radius=4, outline=(70, 70, 76))
     w = int((x1 - x0 - 2) * min(pct_v, 100) / 100)
     if w > 0:
-        d.rounded_rectangle([x0 + 1, y + 27, x0 + 1 + w, y + 33], radius=3, fill=col)
+        d.rounded_rectangle([x0 + 1, y + 28, x0 + 1 + w, y + 35], radius=3, fill=col)
     if detail:
-        d.text((x0, y + 47), detail, fill=DIM, font=_font(12), anchor="ls")
+        d.text((x0, y + 51), detail, fill=DIM,
+               font=_fitted(d, detail, 14, x1 - x0, False), anchor="ls")
 
 
 def _reset_text(ts) -> str:
@@ -202,9 +203,9 @@ def limits_card(status: dict, today_cost: float | None = None,
     img = Image.new("RGB", SIZE, BG)
     d = ImageDraw.Draw(img)
     x0, x1 = 7, SCREEN_W - 7
-    d.rectangle([0, 0, SCREEN_W, 28], fill=CLAUDE)
-    d.text((SCREEN_W // 2, 14), "claude usage", fill=(255, 255, 255),
-           font=_font(16, True), anchor="mm")
+    d.rectangle([0, 0, SCREEN_W, 24], fill=CLAUDE)
+    d.text((SCREEN_W // 2, 12), "claude usage", fill=(255, 255, 255),
+           font=_font(17, True), anchor="mm")
 
     gauges = []
     if five:
@@ -214,26 +215,26 @@ def limits_card(status: dict, today_cost: float | None = None,
     gauges.append(("context", ctx.get("used_percentage"),
                    f"{_tokens(used_tokens)} of {_tokens(window)}"
                    if used_tokens is not None and window else ""))
-    y = 30
+    y = 25
     for label, pct, detail in gauges:
         _gauge(d, y, label, pct, detail, x0, x1)
-        y += 50
+        y += 54
 
     # dollars: today across all sessions, big; this session and the time, small
     d.line([x0, y + 2, x1, y + 2], fill=(40, 40, 46))
-    label = _font(13)
+    label = _font(15)
     today = today_cost if today_cost is not None else session_cost
-    d.text((x0, y + 26), "today", fill=DIM, font=label, anchor="ls")
+    d.text((x0, y + 27), "today", fill=DIM, font=label, anchor="ls")
     room = x1 - x0 - d.textlength("today", font=label) - 6
-    d.text((x1, y + 29), f"${today:.2f}", fill=FG,
-           font=_fitted(d, f"${today:.2f}", 26, room), anchor="rs")
+    d.text((x1, y + 30), f"${today:.2f}", fill=FG,
+           font=_fitted(d, f"${today:.2f}", 28, room), anchor="rs")
     n = today_sessions or 1
     sess = f"{n} session" + ("s" if n != 1 else "")
     clock = time.strftime("%H:%M", time.localtime(now or time.time()))
-    small = _font(12)
-    d.text((x1, SCREEN_H - 8), clock, fill=DIM, font=small, anchor="rs")
-    d.text((x0, SCREEN_H - 8), sess, fill=DIM,
-           font=_fitted(d, sess, 12, x1 - x0 - d.textlength(clock, font=small) - 6, False),
+    small = _font(14)
+    d.text((x1, SCREEN_H - 5), clock, fill=DIM, font=small, anchor="rs")
+    d.text((x0, SCREEN_H - 5), sess, fill=DIM,
+           font=_fitted(d, sess, 14, x1 - x0 - d.textlength(clock, font=small) - 6, False),
            anchor="ls")
     return img.tobytes()
 

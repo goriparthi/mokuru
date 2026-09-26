@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import math
+import os
 import sys
 import threading
 
@@ -100,6 +101,9 @@ def run_tray() -> int:
                 icon.title = f"mokuru: {label(None)}"
                 icon.update_menu()
                 last = key
+        # pystray's stop() can block when called from another thread; arm a
+        # hard exit first so a dead tray never keeps the single-instance lock.
+        threading.Timer(3.0, os._exit, args=(0,)).start()
         icon.stop()
 
     threading.Thread(target=refresh, daemon=True).start()
