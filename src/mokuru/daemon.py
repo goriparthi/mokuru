@@ -8,7 +8,6 @@ patterns, LCD frames) are rate limited and never run back to back.
 from __future__ import annotations
 
 import json
-import math
 import os
 import queue
 import threading
@@ -324,18 +323,14 @@ class Daemon:
 
     # --- LCD screens -----------------------------------------------------------
 
-    @staticmethod
-    def _rate_bucket(bps: float) -> int:
-        """0 below 100 kb/s, then one step per doubling: idle links don't redraw."""
-        bits = bps * 8
-        return 0 if bits < 1e5 else int(math.log2(bits / 1e5)) + 1
-
     def _screen_key(self, kind: str) -> tuple:
         if kind == "network":
             from . import sysinfo
             n = sysinfo.network()
-            return ("network", self._rate_bucket(n["rx"]), self._rate_bucket(n["tx"]),
-                    n.get("ssid") or n.get("iface"), n.get("ip"))
+            half_gb = 2**29
+            return ("network", tuple((l["kind"], l.get("ssid")) for l in n["links"]), n["ip"],
+                    int(n["recv_total"] // half_gb), int(n["sent_total"] // half_gb),
+                    int(time.time() // 600))   # the time on it is at most 10 minutes old
         if kind == "system":
             from . import sysinfo
             st = sysinfo.sample()
@@ -570,8 +565,24 @@ def serve(daemon: Daemon | None = None, block: bool = True) -> Daemon:
         raise OSError(f"no free port in {base}..{base + 19}")
     server.daemon_threads = True
     config.STATE_DIR.mkdir(parents=True, exist_ok=True)
-    config.PID_FILE.write_text(str(os.getpid()))
-    config.PORT_FILE.write_text(str(server.server_address[1]))
+    mine = {config.PID_FILE: str(os.getpid()), config.PORT_FILE: str(server.server_address[1])}
+
+    def _advertise():
+        """Keep the pid/port files pointing at us (another process may have
+        removed them on its way out), until we stop."""
+        while not daemon.stop_evt.is_set():
+            for f, value in mine.items():
+                try:
+                    if f.read_text().strip() != value:
+                        f.write_text(value)
+                except OSError:
+                    try:
+                        f.write_text(value)
+                    except OSError:
+                        pass
+            daemon.stop_evt.wait(3.0)
+
+    threading.Thread(target=_advertise, name="mokuru-advertise", daemon=True).start()
     threading.Thread(target=server.serve_forever, name="mokuru-http", daemon=True).start()
     if daemon.cfg.get("dial_switcher"):
         from . import dialswitch
@@ -582,9 +593,10 @@ def serve(daemon: Daemon | None = None, block: bool = True) -> Daemon:
     def _stop_server():
         daemon.stop_evt.wait()
         server.shutdown()
-        for f in (config.PID_FILE, config.PORT_FILE):
+        for f, value in mine.items():
             try:
-                f.unlink()
+                if f.read_text().strip() == value:   # only our own
+                    f.unlink()
             except OSError:
                 pass
 

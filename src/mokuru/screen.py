@@ -38,7 +38,7 @@ def _fitted(d, text: str, size: int, max_w: float, bold: bool = True):
 
 
 def fit(img: Image.Image) -> bytes:
-    return ImageOps.fit(img.convert("RGB"), SIZE).tobytes()
+    return ImageOps.fit(img.convert("RGB"), SIZE, Image.LANCZOS).tobytes()
 
 
 def load_image(path: str) -> bytes:
@@ -253,17 +253,8 @@ def system_card(stats: dict, now: float | None = None) -> bytes:
 
 
 NETWORK = (140, 110, 220)
-DOWN_COL, UP_COL = (70, 200, 110), (90, 170, 220)
-
-
-def _rate(bps: float) -> tuple[str, str]:
-    """Bytes/s -> ("12.4", "Mb/s"), in bits like ISPs quote."""
-    bits = bps * 8
-    for unit, scale in (("Gb/s", 1e9), ("Mb/s", 1e6), ("kb/s", 1e3)):
-        if bits >= scale:
-            v = bits / scale
-            return (f"{v:.1f}" if v < 100 else f"{v:.0f}"), unit
-    return f"{bits:.0f}", "b/s"
+KIND_LABEL = {"ethernet": "Ethernet", "wifi": "Wi-Fi", "vpn": "VPN"}
+KIND_COLOR = {"ethernet": GREEN, "wifi": GREEN, "vpn": (90, 170, 220)}
 
 
 def _bytes(n: float) -> str:
@@ -274,59 +265,65 @@ def _bytes(n: float) -> str:
     return f"{n:.0f} B"
 
 
-def _spark(d, box, values, color) -> None:
-    x0, y0, x1, y1 = box
-    d.rounded_rectangle(box, radius=3, outline=(50, 50, 56))
-    if len(values) < 2:
-        return
-    top = max(values) or 1.0
-    n = len(values)
-    pts = [(x0 + 2 + (x1 - x0 - 4) * i / (n - 1),
-            y1 - 2 - (y1 - y0 - 4) * v / top) for i, v in enumerate(values)]
-    fill = [(pts[0][0], y1 - 2)] + pts + [(pts[-1][0], y1 - 2)]
-    d.polygon(fill, fill=tuple(int(c * 0.35) for c in color))
-    d.line(pts, fill=color, width=2)
+def _clip(d, text: str, font, width: float) -> str:
+    if d.textlength(text, font=font) <= width:
+        return text
+    while text and d.textlength(text + "…", font=font) > width:
+        text = text[:-1]
+    return text + "…" if text else ""
 
 
 def network_card(net: dict, now: float | None = None) -> bytes:
-    """Download/upload rates with recent history, totals, and the link."""
+    """Connections (Wi-Fi / Ethernet / VPN), IP, data used since boot, time."""
     img = Image.new("RGB", SIZE, BG)
     d = ImageDraw.Draw(img)
     x0, x1 = 7, SCREEN_W - 7
     d.rectangle([0, 0, SCREEN_W, 22], fill=NETWORK)
     d.text((SCREEN_W // 2, 11), "network", fill=(255, 255, 255),
            font=_font(17, True), anchor="mm")
-    hist = net.get("history") or []
-    y = 24
-    for label, key, idx, col in (("down", "rx", 0, DOWN_COL), ("up", "tx", 1, UP_COL)):
-        value, unit = _rate(float(net.get(key) or 0))
-        lab = _font(16)
-        d.text((x0, y + 23), label, fill=DIM, font=lab, anchor="ls")
-        ufont = _font(13)
-        uw = d.textlength(unit, font=ufont)
-        d.text((x1, y + 23), unit, fill=DIM, font=ufont, anchor="rs")
-        room = x1 - x0 - d.textlength(label, font=lab) - uw - 10
-        d.text((x1 - uw - 4, y + 25), value, fill=col,
-               font=_fitted(d, value, 28, room), anchor="rs")
-        _spark(d, (x0, y + 30, x1, y + 52), [h[idx] for h in hist], col)
-        y += 58
-    d.line([x0, y + 1, x1, y + 1], fill=(40, 40, 46))
-    d.text((x0, y + 19), "since boot", fill=DIM, font=_font(13), anchor="ls")
-    tot = f"↓{_bytes(net.get('recv_total') or 0)}  ↑{_bytes(net.get('sent_total') or 0)}"
-    d.text((x0, y + 38), tot, fill=FG, font=_fitted(d, tot, 15, x1 - x0, False), anchor="ls")
-    y += 44
-    name = net.get("ssid") or net.get("iface") or "offline"
-    d.text((x0, y + 20), name, fill=FG, font=_fitted(d, name, 16, x1 - x0, True), anchor="ls")
-    ip = net.get("ip") or ""
-    small = _font(15)
-    clock = time.strftime("%H:%M", time.localtime(now or time.time()))
-    d.text((x1, SCREEN_H - 3), clock, fill=DIM, font=small, anchor="rs")
-    if ip:
-        d.text((x0, SCREEN_H - 3), ip, fill=DIM,
-               font=_fitted(d, ip, 15, x1 - x0 - d.textlength(clock, font=small) - 6, False),
-               anchor="ls")
-    return img.tobytes()
 
+    links = (net.get("links") or [])[:3]
+    rows = links or [{"kind": None}]
+    step = 24 if len(rows) < 3 else 22
+    y = 25
+    for l in rows:
+        f = _font(19 if len(rows) < 3 else 18, True)
+        if l["kind"] is None:
+            dot, label = RED, "offline"
+        else:
+            dot, label = KIND_COLOR[l["kind"]], KIND_LABEL[l["kind"]]
+        d.ellipse([x0, y + 8, x0 + 10, y + 18], fill=dot)
+        d.text((x0 + 16, y + 19), label, fill=FG, font=f, anchor="ls")
+        if l.get("ssid"):
+            left = x0 + 16 + d.textlength(label, font=f) + 6
+            sf = _font(14)
+            if d.textlength(l["ssid"], font=sf) <= x1 - left:
+                d.text((x1, y + 19), l["ssid"], fill=DIM, font=sf, anchor="rs")
+            elif len(rows) < 3:      # room for the name on its own line
+                y += 18
+                nf = _font(15)
+                d.text((x0 + 16, y + 17), _clip(d, l["ssid"], nf, x1 - x0 - 16), fill=DIM,
+                       font=nf, anchor="ls")
+            else:
+                d.text((x1, y + 19), _clip(d, l["ssid"], sf, x1 - left), fill=DIM, font=sf, anchor="rs")
+        y += step
+
+    y += 4
+    d.line([x0, y, x1, y], fill=(40, 40, 46))
+    ip = net.get("ip") or "no address"
+    d.text((x0, y + 26), ip, fill=FG, font=_fitted(d, ip, 22, x1 - x0, True), anchor="ls")
+    y += 34
+
+    d.text((x0, y + 14), "since boot", fill=DIM, font=_font(14), anchor="ls")
+    y += 16
+    for arrow, key, col in (("↓", "recv_total", GREEN), ("↑", "sent_total", (90, 170, 220))):
+        text = _bytes(float(net.get(key) or 0))
+        d.text((x0, y + 21), arrow, fill=col, font=_font(20, True), anchor="ls")
+        d.text((x1, y + 21), text, fill=FG, font=_fitted(d, text, 21, x1 - x0 - 22, True), anchor="rs")
+        y += 24
+    clock = time.strftime("%H:%M", time.localtime(now or time.time()))
+    d.text((SCREEN_W // 2, SCREEN_H - 3), clock, fill=FG, font=_font(28, True), anchor="ms")
+    return img.tobytes()
 
 def blank() -> bytes:
     return Image.new("RGB", SIZE, (0, 0, 0)).tobytes()

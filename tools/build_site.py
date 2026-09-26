@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import colorsys
-import math
 import html
 import json
 import sys
@@ -40,11 +39,9 @@ SAMPLE_SYSTEM = {
 
 
 SAMPLE_NETWORK = {
-    "rx": 3.1e6, "tx": 2.4e5,
-    "history": [(2.2e6 + 1.4e6 * math.sin(i / 5) ** 2 + (i % 7) * 6e4,
-                 1.6e5 + 1.2e5 * math.cos(i / 8) ** 2) for i in range(60)],
-    "recv_total": 18.4 * 2**30, "sent_total": 3.2 * 2**30,
-    "ssid": "home-wifi", "ip": "192.168.1.20",
+    "recv_total": 18.4 * 2**30, "sent_total": 3.2 * 2**30, "ip": "192.168.1.20",
+    "links": [{"kind": "ethernet", "name": "Ethernet", "ip": "192.168.1.20", "ssid": None},
+              {"kind": "wifi", "name": "Wi-Fi", "ip": "192.168.1.21", "ssid": "home-wifi"}],
 }
 
 

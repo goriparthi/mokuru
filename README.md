@@ -34,13 +34,14 @@ show what **Claude Code** is doing. Runs on Windows, macOS and Linux.
 <tr>
 <td valign="top">5-hour and weekly plan limits with reset times, context used (percent and tokens), and dollars spent today across all sessions. Drawn from Claude Code's own status line.</td>
 <td valign="top">CPU load, core count and clock; memory and disk in use; machine name and uptime.</td>
-<td valign="top">Download and upload speed with the last few minutes graphed, data since boot, Wi-Fi name (or adapter) and IP.</td>
+<td valign="top">Which connections are up (Ethernet, Wi-Fi with its network name, VPN), your IP, data used since boot, and the time.</td>
 </tr>
 </table>
 
 Bars turn yellow at 70% and red at 90%. The keyboard keeps its own clock
-page too. Each screen redraws only when its numbers move (the network screen
-when a speed doubles or halves), at most every 5 minutes. An upload takes
+page too. Each screen redraws only when its numbers move, at most every 5
+minutes; the network screen also redraws every 10 minutes to keep its time
+current. An upload takes
 about 20 s and is spaced to spare the keyboard's flash. Slots 3 and 4 are
 free for your own pictures (`mokuru image`).
 

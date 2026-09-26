@@ -71,11 +71,20 @@ def test_default_screens():
     assert config.DEFAULTS["lcd"]["screens"] == {"0": "usage", "1": "system", "2": "network"}
 
 
-def test_network_card_and_idle_links_do_not_redraw():
-    net = {"rx": 1.2e6, "tx": 9e4, "history": [(i * 1e4, i * 1e3) for i in range(60)],
-           "recv_total": 5 * 2**30, "sent_total": 2**30, "ip": "10.0.0.2", "iface": "Ethernet"}
+def test_network_card():
+    net = {"recv_total": 5 * 2**30, "sent_total": 2**30, "ip": "10.0.0.2",
+           "links": [{"kind": "ethernet", "name": "Ethernet", "ip": "10.0.0.2", "ssid": None},
+                     {"kind": "wifi", "name": "Wi-Fi", "ip": "10.0.0.9", "ssid": "home"},
+                     {"kind": "vpn", "name": "Ethernet 3", "ip": "172.20.0.2", "ssid": None}]}
     assert len(screen.network_card(net)) == 135 * 240 * 3
-    assert len(screen.network_card({})) == 135 * 240 * 3
-    b = Daemon._rate_bucket
-    assert b(0) == b(5_000) == b(12_000) == 0        # under 100 kb/s: one bucket
-    assert b(1e6) != b(2.1e6)                         # a doubling is a change
+    assert len(screen.network_card({})) == 135 * 240 * 3      # offline
+
+
+def test_adapter_classification():
+    from mokuru.sysinfo import classify
+    assert classify("Wi-Fi", "Intel(R) Wi-Fi 6 AX201") == "wifi"
+    assert classify("Ethernet", "Intel(R) Ethernet Connection I219-LM") == "ethernet"
+    assert classify("Ethernet 3", "PANGP Virtual Ethernet Adapter Secure") == "vpn"
+    assert classify("vEthernet (WSL (Hyper-V firewall))") is None
+    assert classify("enp3s0") == "ethernet" and classify("wg0") == "vpn"
+    assert classify("docker0") is None and classify("lo") is None

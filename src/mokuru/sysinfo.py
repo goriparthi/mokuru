@@ -48,13 +48,10 @@ def sample(max_age: float = 5.0) -> dict:
 
 # --- network ------------------------------------------------------------------
 
-import collections  # noqa: E402
 import socket  # noqa: E402
 import subprocess  # noqa: E402
 import sys  # noqa: E402
 
-NET_HISTORY = collections.deque(maxlen=60)   # (rx bytes/s, tx bytes/s) every 5 s
-_net_last: tuple | None = None               # (monotonic, bytes_recv, bytes_sent)
 _link: dict = {}
 _link_at = 0.0
 
@@ -95,35 +92,109 @@ def _wifi_ssid() -> str | None:
         return None
 
 
+SKIP = ("loopback", "hyper-v", "kernel debug", "wan miniport", "bluetooth",
+        "wi-fi direct", "vethernet", "vswitch", "docker", "veth", "virbr", "br-")
+VPN = ("vpn", "tap-", "tap ", "wireguard", "wintun", "pangp", "anyconnect", "fortinet",
+       "juniper", "pulse", "openvpn", "tailscale", "zerotier", "tun", "wg", "ppp", "utun")
+WIFI = ("wi-fi", "wifi", "wireless", "wlan", "802.11", "airport")
+
+_NET_KEY = r"SYSTEM\CurrentControlSet\Control\Network\{4D36E972-E325-11CE-BFC1-08002BE10318}"
+_CLASS_KEY = r"SYSTEM\CurrentControlSet\Control\Class\{4D36E972-E325-11CE-BFC1-08002BE10318}"
+
+
+def _descriptions() -> dict:
+    """Adapter name -> driver description (Windows registry; empty elsewhere)."""
+    if sys.platform != "win32":
+        return {}
+    import winreg
+    names, out = {}, {}
+    try:
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, _NET_KEY) as k:
+            for i in range(winreg.QueryInfoKey(k)[0]):
+                guid = winreg.EnumKey(k, i)
+                try:
+                    with winreg.OpenKey(k, guid + r"\Connection") as c:
+                        names[guid] = winreg.QueryValueEx(c, "Name")[0]
+                except OSError:
+                    pass
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, _CLASS_KEY) as k:
+            for i in range(winreg.QueryInfoKey(k)[0]):
+                try:
+                    with winreg.OpenKey(k, winreg.EnumKey(k, i)) as c:
+                        guid = winreg.QueryValueEx(c, "NetCfgInstanceId")[0]
+                        if guid in names:
+                            out[names[guid]] = winreg.QueryValueEx(c, "DriverDesc")[0]
+                except OSError:
+                    pass
+    except OSError:
+        pass
+    return out
+
+
+def _mac_ports() -> dict:
+    """Device -> hardware port name ("en0" -> "Wi-Fi") on macOS."""
+    if sys.platform != "darwin":
+        return {}
+    try:
+        out = subprocess.run(["networksetup", "-listallhardwareports"],
+                             capture_output=True, text=True, timeout=3).stdout
+    except (OSError, subprocess.SubprocessError):
+        return {}
+    ports, port = {}, None
+    for line in out.splitlines():
+        if line.startswith("Hardware Port:"):
+            port = line.split(":", 1)[1].strip()
+        elif line.startswith("Device:") and port:
+            ports[line.split(":", 1)[1].strip()] = port
+    return ports
+
+
+def classify(name: str, desc: str = "") -> str | None:
+    """'wifi', 'ethernet', 'vpn', or None for adapters not worth showing."""
+    text = f"{name} {desc}".lower()
+    if name.lower() == "lo" or any(k in text for k in SKIP):
+        return None
+    if any(k in text for k in VPN):
+        return "vpn"
+    if any(k in text for k in WIFI) or os.path.isdir(f"/sys/class/net/{name}/wireless"):
+        return "wifi"
+    if text.startswith(("ethernet", "eth", "en", "usb")) or "ethernet" in text:
+        return "ethernet"
+    return None
+
+
 def link(max_age: float = 60.0) -> dict:
-    """Primary interface, IP and Wi-Fi name; cached (it rarely changes)."""
+    """Active connections (Wi-Fi / Ethernet / VPN) and the LAN IP; cached."""
     global _link, _link_at
     if _link and time.monotonic() - _link_at < max_age:
         return _link
+    stats, addrs = psutil.net_if_stats(), psutil.net_if_addrs()
+    descs, ports = _descriptions(), _mac_ports()
+    ssid = _wifi_ssid()
+    links = []
+    for name, st in stats.items():
+        v4 = [a.address for a in addrs.get(name, [])
+              if a.family == socket.AF_INET and not a.address.startswith(("169.254.", "127."))]
+        if not st.isup or not v4:
+            continue
+        kind = classify(name, descs.get(name, "") or ports.get(name, ""))
+        if kind == "wifi" and sys.platform in ("win32", "darwin") and not ssid:
+            continue            # adapter up but not joined to a network
+        if kind:
+            links.append({"kind": kind, "name": name, "ip": v4[0],
+                          "ssid": ssid if kind == "wifi" else None})
+    order = {"ethernet": 0, "wifi": 1, "vpn": 2}
+    links.sort(key=lambda l: (order[l["kind"]], l["name"]))
     ip = _primary_ip()
-    iface = None
-    if ip:
-        for name, addrs in psutil.net_if_addrs().items():
-            if any(a.address == ip for a in addrs):
-                iface = name
-                break
-    _link = {"ip": ip, "iface": iface, "ssid": _wifi_ssid()}
+    lan = [l for l in links if l["kind"] != "vpn"]
+    if lan and ip not in [l["ip"] for l in lan]:
+        ip = lan[0]["ip"]       # show the LAN address, not the VPN tunnel's
+    _link = {"links": links, "ip": ip, "ssid": ssid}
     _link_at = time.monotonic()
     return _link
 
 
-def network(step: float = 5.0) -> dict:
-    """Current rates (bytes/s), a short history, totals since boot, and the link."""
-    global _net_last
-    now = time.monotonic()
+def network() -> dict:
+    """Data used since boot and the active connections."""
     io = psutil.net_io_counters()
-    if _net_last is None:
-        _net_last = (now, io.bytes_recv, io.bytes_sent)
-    elif now - _net_last[0] >= step:
-        dt = now - _net_last[0]
-        NET_HISTORY.append((max(0.0, (io.bytes_recv - _net_last[1]) / dt),
-                            max(0.0, (io.bytes_sent - _net_last[2]) / dt)))
-        _net_last = (now, io.bytes_recv, io.bytes_sent)
-    rx, tx = NET_HISTORY[-1] if NET_HISTORY else (0.0, 0.0)
-    return {"rx": rx, "tx": tx, "history": list(NET_HISTORY),
-            "recv_total": io.bytes_recv, "sent_total": io.bytes_sent, **link()}
+    return {"recv_total": io.bytes_recv, "sent_total": io.bytes_sent, **link()}

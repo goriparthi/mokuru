@@ -54,7 +54,7 @@ def _python_for_background() -> str:
     return exe
 
 
-def start_daemon(wait: float = 5.0) -> bool:
+def start_daemon(wait: float = 12.0) -> bool:
     if daemon_running():
         return True
     config.STATE_DIR.mkdir(parents=True, exist_ok=True)
