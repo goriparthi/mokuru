@@ -39,9 +39,14 @@ show what **Claude Code** is doing. Runs on Windows, macOS and Linux.
 </table>
 
 Bars turn yellow at 70% and red at 90%. The keyboard keeps its own clock
-page too. Each screen redraws only when its numbers move, at most every 5
-minutes; the network screen also redraws every 10 minutes to keep its time
-current. An upload takes
+page too. Each screen redraws only when its numbers move, at most every
+`lcd.min_interval` seconds (default 300); the network screen also redraws to
+keep its time current (every 10 minutes at the default).
+
+Every redraw rewrites the screen's image in the keyboard's flash memory,
+which wears out after enough rewrites. Lowering `min_interval` makes the
+screens fresher at the cost of that wear; at 20 s a busy screen can be
+rewritten thousands of times a day. An upload takes
 about 20 s and is spaced to spare the keyboard's flash. Slots 3 and 4 are
 free for your own pictures (`mokuru image`).
 

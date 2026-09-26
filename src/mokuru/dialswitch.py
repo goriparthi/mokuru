@@ -71,13 +71,51 @@ class Switcher:
             self.send(mod, False)
 
 
-def start() -> threading.Thread | None:
-    """Install the hook on its own thread. No-op off Windows."""
+def supervise(stop_evt: threading.Event) -> threading.Thread | None:
+    """Run the hook in its own process (`mokuru dial`) and keep it running.
+
+    Windows silently removes a low-level hook whose process is ever slow to
+    answer, and the daemon's process is busy (LCD uploads, the tray). A
+    small process that only runs the hook answers in time.
+    """
     if sys.platform != "win32":
         return None
-    t = threading.Thread(target=_run_windows, name="mokuru-dial", daemon=True)
+
+    def loop():
+        import subprocess
+        from .cli import _python_for_background
+        child = None
+        while not stop_evt.is_set():
+            if child is None or child.poll() is not None:
+                child = subprocess.Popen(
+                    [_python_for_background(), "-m", "mokuru", "dial"],
+                    stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL, creationflags=subprocess.CREATE_NO_WINDOW)
+            stop_evt.wait(5.0)
+        if child is not None and child.poll() is None:
+            child.terminate()
+
+    t = threading.Thread(target=loop, name="mokuru-dial-supervisor", daemon=True)
     t.start()
     return t
+
+
+def run_process() -> int:
+    """`mokuru dial`: the hook, alone in this process. One at a time."""
+    if sys.platform != "win32":
+        print("the dial switcher is Windows only", file=sys.stderr)
+        return 1
+    import msvcrt
+    from . import config
+    config.STATE_DIR.mkdir(parents=True, exist_ok=True)
+    lock = open(config.STATE_DIR / "dial.lock", "a+")
+    try:
+        lock.seek(0)
+        msvcrt.locking(lock.fileno(), msvcrt.LK_NBLCK, 1)
+    except OSError:
+        return 0            # another one is already running
+    _run_windows()
+    return 0
 
 
 def _run_windows() -> None:
@@ -149,10 +187,28 @@ def _run_windows() -> None:
                         pass
         return user32.CallNextHookEx(hook, n_code, w_param, l_param)
 
-    hook = user32.SetWindowsHookExW(WH_KEYBOARD_LL, proc, kernel32.GetModuleHandleW(None), 0)
-    if not hook:
+    WM_TIMER = 0x0113
+    REHOOK_MS = 120_000
+    user32.UnhookWindowsHookEx.argtypes = [wintypes.HHOOK]
+    user32.SetTimer.argtypes = [wintypes.HWND, ctypes.c_size_t, wintypes.UINT, ctypes.c_void_p]
+    module = kernel32.GetModuleHandleW(None)
+
+    def install():
+        nonlocal hook
+        if hook:
+            user32.UnhookWindowsHookEx(hook)
+        hook = user32.SetWindowsHookExW(WH_KEYBOARD_LL, proc, module, 0)
+        return bool(hook)
+
+    if not install():
         return
+    # Re-install now and then: if Windows ever dropped the hook, this puts it
+    # back without anyone noticing it was gone.
+    user32.SetTimer(None, 0, REHOOK_MS, None)
     msg = wintypes.MSG()
     while user32.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
+        if msg.message == WM_TIMER:
+            install()
+            continue
         user32.TranslateMessage(ctypes.byref(msg))
         user32.DispatchMessageW(ctypes.byref(msg))

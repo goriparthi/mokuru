@@ -330,7 +330,8 @@ class Daemon:
             half_gb = 2**29
             return ("network", tuple((l["kind"], l.get("ssid")) for l in n["links"]), n["ip"],
                     int(n["recv_total"] // half_gb), int(n["sent_total"] // half_gb),
-                    int(time.time() // 600))   # the time on it is at most 10 minutes old
+                    # keep its clock no staler than the refresh allows (a minute at best)
+                    int(time.time() // max(60, 2 * float(self.cfg["lcd"]["min_interval"]))))
         if kind == "system":
             from . import sysinfo
             st = sysinfo.sample()
@@ -587,7 +588,7 @@ def serve(daemon: Daemon | None = None, block: bool = True) -> Daemon:
     threading.Thread(target=server.serve_forever, name="mokuru-http", daemon=True).start()
     if daemon.cfg.get("dial_switcher"):
         from . import dialswitch
-        dialswitch.start()
+        dialswitch.supervise(daemon.stop_evt)
     worker = threading.Thread(target=daemon.run, name="mokuru-device", daemon=True)
     worker.start()
 

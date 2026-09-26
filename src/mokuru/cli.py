@@ -179,6 +179,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("clock", help="set the LCD clock to local time")
     sub.add_parser("pause", help="stop reacting to Claude Code")
     sub.add_parser("resume", help="react to Claude Code again")
+    sub.add_parser("dial", help="(run by the daemon) Ctrl + dial app switcher hook")
 
     lp = sub.add_parser("light", help="set your own lighting (restored after Claude)")
     lp.add_argument("mode", choices=sorted(set(MODES) - {"per-key"}) + ["off"])
@@ -215,6 +216,9 @@ def main(argv=None) -> int:
     c = args.cmd
     if c == "hook":
         return do_hook(args)
+    if c == "dial":
+        from .dialswitch import run_process
+        return run_process()
     if c == "tap":
         if args.command and args.command[0] == "--":
             args.command = args.command[1:]
